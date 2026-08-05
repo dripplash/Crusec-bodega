@@ -1,0 +1,34 @@
+{
+  "products": [
+    {
+      "relbaseId": "demo-1",
+      "sku": "C02140",
+      "name": "Producto Crusec de demostración",
+      "barcode": "7800000021406",
+      "brand": "Crusec",
+      "active": true,
+      "stock": 24,
+      "stockUpdatedAt": "2026-07-30T20:00:00.000Z"
+    },
+    {
+      "relbaseId": "demo-2",
+      "sku": "P00240",
+      "name": "Producto Pitaya de demostración",
+      "barcode": "7800000002405",
+      "brand": "Pitaya",
+      "active": true,
+      "stock": 18,
+      "stockUpdatedAt": "2026-07-30T20:00:00.000Z"
+    },
+    {
+      "relbaseId": "demo-3",
+      "sku": "Y00120",
+      "name": "Producto Yozen de demostración",
+      "barcode": "7800000001200",
+      "brand": "Yozen",
+      "active": true,
+      "stock": 7,
+      "stockUpdatedAt": "2026-07-30T20:00:00.000Z"
+    }
+  ]
+}
