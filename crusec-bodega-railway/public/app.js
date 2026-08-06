@@ -185,11 +185,13 @@ async function loadProducts() {
 
   state.products = payload.products;
 
-  const statusText = payload.lastSyncAt
-    ? `● Relbase conectado\n${state.products.length} productos en esta vista\nÚltima actualización: ${formatDate(payload.lastSyncAt)}`
-    : `● Relbase conectado\n${state.products.length} productos en esta vista\nSin sincronización registrada`;
+  const syncStatus = $('#sync-status');
 
-  $('#sync-status').textContent = statusText;
+syncStatus.className = 'sync-status connected';
+
+syncStatus.innerHTML = payload.lastSyncAt
+  ? `<span class="status-dot"></span><span><strong>Relbase conectado</strong><br>${state.products.length} productos en esta vista<br>Última actualización: ${formatDate(payload.lastSyncAt)}</span>`
+  : `<span class="status-dot"></span><span><strong>Relbase conectado</strong><br>${state.products.length} productos en esta vista<br>Sin sincronización registrada</span>`;
 
   renderProductList();
 }
