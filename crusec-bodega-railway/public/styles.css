@@ -340,3 +340,192 @@ main {
     max-height: 64px;
   }
 }
+/* Ajuste móvil v13: mejora uso en celulares y evita cortes horizontales */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.product-name,
+.product-sku,
+.brand-small,
+.location-chip,
+#assign-name,
+#assign-sku,
+#result-name,
+#result-sku {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 760px) {
+  body {
+    background: var(--bg);
+  }
+
+  .topbar {
+    width: 100%;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .brand-logo {
+    margin: 0 auto;
+  }
+
+  .tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .tab {
+    width: 100%;
+    padding: 9px 10px;
+    font-size: 0.86rem;
+    text-align: center;
+  }
+
+  main {
+    width: 100%;
+    margin: 18px 0 42px;
+    padding: 0 10px;
+  }
+
+  .page-title {
+    font-size: 1.75rem;
+    margin: 0 0 14px;
+    padding: 0 2px;
+  }
+
+  .admin-toolbar,
+  .filters-card,
+  .product-list-card,
+  .assignment-card,
+  .hero-card,
+  .result-card {
+    width: 100%;
+    border-radius: 16px;
+  }
+
+  .admin-toolbar {
+    padding: 18px;
+  }
+
+  .admin-toolbar h2 {
+    font-size: 1.45rem;
+    line-height: 1.15;
+  }
+
+  .toolbar-actions {
+    width: 100%;
+  }
+
+  #sync-button {
+    width: 100%;
+  }
+
+  .filters-card {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .filters-card input,
+  .filters-card select,
+  .filters-card button {
+    min-height: 48px;
+  }
+
+  .admin-layout {
+    display: block;
+  }
+
+  .product-list-card {
+    min-height: auto;
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+
+  .assignment-card {
+    min-height: auto;
+    padding: 16px;
+  }
+
+  .product-list {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .product-item {
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .product-item-top {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 8px;
+  }
+
+  .product-item strong {
+    font-size: 0.95rem;
+    line-height: 1.25;
+  }
+
+  .product-item small {
+    font-size: 0.78rem;
+    line-height: 1.25;
+  }
+
+  .stock-chip {
+    min-width: 58px;
+    max-width: 64px;
+    min-height: 58px;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    white-space: normal;
+    font-size: 0.72rem;
+    line-height: 1.1;
+    padding: 8px;
+  }
+
+  .location-chip {
+    max-width: 100%;
+    font-size: 0.74rem;
+  }
+
+  .assign-stock strong,
+  .stock-box strong {
+    font-size: 2.25rem;
+  }
+
+  .result-header {
+    padding: 20px;
+  }
+
+  .location-panel {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 380px) {
+  .tab {
+    font-size: 0.78rem;
+    padding: 8px 7px;
+  }
+
+  .product-item strong {
+    font-size: 0.88rem;
+  }
+
+  .stock-chip {
+    min-width: 54px;
+    max-width: 58px;
+    min-height: 54px;
+    font-size: 0.68rem;
+  }
+}
