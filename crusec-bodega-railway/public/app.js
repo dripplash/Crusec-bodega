@@ -101,7 +101,9 @@ async function loadStatus() {
       indicator.className = 'connection-indicator demo';
     }
   } catch (error) {
-    $('#connection-indicator').textContent = 'No se pudo comprobar el estado del servidor';
+    const indicator = $('#connection-indicator');
+indicator.textContent = 'No conectado';
+indicator.className = 'connection-indicator error';
   }
 }
 
