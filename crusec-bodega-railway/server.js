@@ -50,15 +50,14 @@ function normalizeSku(v) {
 }
 
 function brandFromCode(code) {
-  const p = normalizeSku(code).charAt(0);
+  const sku = normalizeSku(code);
+  const p = sku.charAt(0);
 
-  if (p === 'C') return 'Crusec';
   if (p === 'P') return 'Pitaya';
   if (p === 'Y') return 'Yozen';
 
-  return 'Sin identificar';
+  return 'Crusec';
 }
-
 function ensureDataDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
