@@ -174,11 +174,13 @@ function renderProductList() {
 }
 
 function brandFromCode(code) {
-  const prefix = String(code || '').trim().toUpperCase().charAt(0);
-  if (prefix === 'C') return 'Crusec';
+  const sku = String(code || '').trim().toUpperCase();
+  const prefix = sku.charAt(0);
+
   if (prefix === 'P') return 'Pitaya';
   if (prefix === 'Y') return 'Yozen';
-  return 'Sin identificar';
+
+  return 'Crusec';
 }
 
 function escapeHtml(value) {
