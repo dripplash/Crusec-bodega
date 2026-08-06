@@ -9,6 +9,7 @@ const RELBASE_BASE_URL = String(process.env.RELBASE_BASE_URL || 'https://api.rel
 const RELBASE_AUTH_URL = process.env.RELBASE_AUTH_URL || `${RELBASE_BASE_URL}/oauth/authorize`;
 const RELBASE_TOKEN_URL = process.env.RELBASE_TOKEN_URL || `${RELBASE_BASE_URL}/oauth/token`;
 const RELBASE_PRODUCTS_URL = process.env.RELBASE_PRODUCTS_URL || `${RELBASE_BASE_URL}/api/v2/productos`;
+const RELBASE_MAX_PAGES = Math.max(1, Number(process.env.RELBASE_MAX_PAGES || 300));
 
 function ensureDataDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -69,7 +70,6 @@ function tokenStillValid(token) {
   const expiresAt = new Date(token.expires_at).getTime();
   if (Number.isNaN(expiresAt)) return false;
 
-  // Renovar con 60 segundos de margen.
   return expiresAt > Date.now() + 60_000;
 }
 
@@ -97,6 +97,7 @@ async function requestToken(params) {
 
   const text = await response.text();
   let payload = {};
+
   try {
     payload = text ? JSON.parse(text) : {};
   } catch {
@@ -179,6 +180,7 @@ function status() {
     authorized: Boolean(token?.refresh_token || token?.access_token),
     tokenExpiresAt: token?.expires_at || null,
     productsUrl: RELBASE_PRODUCTS_URL,
+    maxPages: RELBASE_MAX_PAGES,
   };
 }
 
@@ -186,20 +188,25 @@ function firstValue(...values) {
   for (const value of values) {
     if (value !== undefined && value !== null && String(value).trim() !== '') return value;
   }
+
   return '';
 }
 
 function nestedName(value) {
   if (!value) return '';
+
   if (typeof value === 'string') return value;
+
   if (typeof value === 'object') {
     return firstValue(value.nombre, value.name, value.descripcion, value.description);
   }
+
   return '';
 }
 
 function numberOrNull(value) {
   if (value === undefined || value === null || value === '') return null;
+
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -251,6 +258,8 @@ function detectStock(product) {
     sumStockArray(product.stocks) ??
     sumStockArray(product.bodegas) ??
     sumStockArray(product.warehouses) ??
+    sumStockArray(product.stock_bodegas) ??
+    sumStockArray(product.stockBodegas) ??
     null
   );
 }
@@ -298,6 +307,7 @@ function normalizeProduct(product) {
   )).trim();
 
   const activeValue = firstValue(product.active, product.activo, product.estado, product.status, true);
+
   const active = typeof activeValue === 'boolean'
     ? activeValue
     : !['false', '0', 'inactivo', 'inactive', 'disabled'].includes(String(activeValue).toLowerCase());
@@ -319,11 +329,13 @@ function extractProducts(payload) {
 
   if (Array.isArray(payload.products)) return payload.products;
   if (Array.isArray(payload.productos)) return payload.productos;
+  if (Array.isArray(payload.resources)) return payload.resources;
   if (Array.isArray(payload.data)) return payload.data;
   if (Array.isArray(payload.items)) return payload.items;
   if (Array.isArray(payload.results)) return payload.results;
 
   if (payload.data && typeof payload.data === 'object') {
+    if (Array.isArray(payload.data.resources)) return payload.data.resources;
     return extractProducts(payload.data);
   }
 
@@ -340,6 +352,7 @@ async function fetchProductsPage(url, accessToken) {
 
   const text = await response.text();
   let payload = {};
+
   try {
     payload = text ? JSON.parse(text) : {};
   } catch {
@@ -354,20 +367,52 @@ async function fetchProductsPage(url, accessToken) {
   return payload;
 }
 
-function nextPageUrl(payload) {
-  const next =
+function nextPageUrl(payload, currentUrl) {
+  const directNext =
     payload?.links?.next ||
     payload?.pagination?.next ||
     payload?.meta?.next ||
     payload?.next;
 
-  if (!next) return null;
-
-  try {
-    return new URL(next, RELBASE_PRODUCTS_URL).toString();
-  } catch {
-    return null;
+  if (directNext) {
+    try {
+      return new URL(directNext, RELBASE_PRODUCTS_URL).toString();
+    } catch {
+      return null;
+    }
   }
+
+  const meta = payload?.meta || payload?.pagination || {};
+
+  let nextPage = numberOrNull(firstValue(
+    meta.next_page,
+    meta.nextPage,
+    meta.next
+  ));
+
+  const currentPage = numberOrNull(firstValue(
+    meta.current_page,
+    meta.currentPage,
+    meta.page
+  ));
+
+  const totalPages = numberOrNull(firstValue(
+    meta.total_pages,
+    meta.totalPages,
+    meta.pages
+  ));
+
+  if (nextPage === null && currentPage !== null && totalPages !== null && currentPage < totalPages) {
+    nextPage = currentPage + 1;
+  }
+
+  if (nextPage === null || nextPage < 1) return null;
+  if (totalPages !== null && nextPage > totalPages) return null;
+
+  const url = new URL(currentUrl || RELBASE_PRODUCTS_URL);
+  url.searchParams.set('page', String(nextPage));
+
+  return url.toString();
 }
 
 async function listProducts() {
@@ -375,21 +420,30 @@ async function listProducts() {
 
   let url = RELBASE_PRODUCTS_URL;
   const all = [];
+  const seenUrls = new Set();
 
-  // Máximo 20 páginas para evitar loops infinitos si la API pagina.
-  for (let page = 0; page < 20 && url; page += 1) {
+  for (let page = 0; page < RELBASE_MAX_PAGES && url; page += 1) {
+    if (seenUrls.has(url)) break;
+    seenUrls.add(url);
+
     const payload = await fetchProductsPage(url, accessToken);
     const products = extractProducts(payload);
     all.push(...products);
 
-    url = nextPageUrl(payload);
+    url = nextPageUrl(payload, url);
   }
 
   const normalized = all
     .map(normalizeProduct)
     .filter((product) => product.sku);
 
-  return normalized;
+  const unique = new Map();
+
+  for (const product of normalized) {
+    unique.set(product.sku, product);
+  }
+
+  return [...unique.values()];
 }
 
 module.exports = {
