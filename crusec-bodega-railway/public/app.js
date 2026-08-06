@@ -194,25 +194,42 @@ function escapeHtml(value) {
 
 function selectProduct(product) {
   state.selectedProduct = product;
-  $('#assignment-card').classList.remove('empty');
+
+  const assignmentCard = $('#assignment-card');
+
+  assignmentCard.classList.remove('empty');
   $('#assignment-empty').classList.add('hidden');
   $('#assignment-content').classList.remove('hidden');
+
   $('#assign-name').textContent = product.name;
   $('#assign-sku').textContent = `SKU: ${product.sku}`;
   $('#assign-brand').textContent = `Marca: ${product.brand || brandFromCode(product.sku)}`;
   $('#assign-stock').textContent = product.stock === null || product.stock === undefined ? '—' : product.stock;
+
   $('#aisle-input').value = product.location?.aisle || '';
   $('#side-input').value = product.location?.side || '';
   $('#rack-input').value = product.location?.rack || '';
   $('#level-input').value = product.location?.level || '';
+
   $('#assignment-mode').textContent = product.location ? 'EDITAR UBICACIÓN' : 'ASIGNAR UBICACIÓN';
   $('#save-location-button').textContent = product.location ? 'Actualizar ubicación' : 'Guardar ubicación';
   $('#delete-location-button').classList.toggle('hidden', !product.location);
+
   renderProductList();
+
   setTimeout(() => {
+    const isMobile = window.matchMedia('(max-width: 860px)').matches;
+
+    if (isMobile) {
+      assignmentCard.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    }
+
     $('#aisle-input').focus();
     $('#aisle-input').select();
-  }, 20);
+  }, 80);
 }
 
 function clearSelection() {
