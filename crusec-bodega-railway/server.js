@@ -2,6 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
+const crypto = require('crypto');
 
 function loadEnvFile() {
   const envPath = path.join(__dirname, '.env');
@@ -27,6 +28,7 @@ const DATA_DIR = path.resolve(process.env.DATA_DIR || PROJECT_DATA_DIR);
 const LOCATIONS_FILE = path.join(DATA_DIR, 'locations.json');
 const SEED_FILE = path.join(PROJECT_DATA_DIR, 'locations.seed.json');
 const DEMO_PRODUCTS_FILE = path.join(PROJECT_DATA_DIR, 'demo-products.json');
+const OAUTH_STATE_FILE = path.join(DATA_DIR, 'relbase-oauth-state.json');
 const CATALOG_MODE = String(process.env.CATALOG_MODE || 'demo').toLowerCase();
 const SYNC_INTERVAL_MINUTES = Math.max(1, Number(process.env.SYNC_INTERVAL_MINUTES || 10));
 
@@ -117,6 +119,164 @@ function validateLocation(input) {
   const sideLabel = side === 'D' ? 'Derecho' : 'Izquierdo';
   return { aisle, side, sideLabel, rack, level, fullLabel: `Pasillo ${aisle} — lado ${sideLabel.toLowerCase()} — rack ${rack} — nivel ${level}` };
 }
+function sendRedirect(res, location) {
+  res.writeHead(302, { Location: location });
+  res.end();
+}
+
+function htmlPage(title, message, extra = '') {
+  return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${title}</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f8;
+      color: #111827;
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+    }
+    main {
+      width: min(680px, calc(100% - 32px));
+      background: white;
+      border: 1px solid #dbe2ea;
+      border-radius: 20px;
+      padding: 32px;
+      box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+    }
+    h1 { margin-top: 0; }
+    a {
+      display: inline-block;
+      margin-top: 16px;
+      background: #1d4ed8;
+      color: white;
+      padding: 12px 16px;
+      border-radius: 12px;
+      text-decoration: none;
+      font-weight: 800;
+    }
+    pre {
+      background: #0f172a;
+      color: #e5e7eb;
+      padding: 14px;
+      border-radius: 12px;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>${title}</h1>
+    <p>${message}</p>
+    ${extra}
+    <a href="/">Volver a Crusec Bodega</a>
+  </main>
+</body>
+</html>`;
+}
+
+function writeOAuthState(state) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(OAUTH_STATE_FILE, JSON.stringify({
+    state,
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+  }, null, 2));
+}
+
+function readOAuthState() {
+  try {
+    if (!fs.existsSync(OAUTH_STATE_FILE)) return null;
+    return JSON.parse(fs.readFileSync(OAUTH_STATE_FILE, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function clearOAuthState() {
+  try {
+    if (fs.existsSync(OAUTH_STATE_FILE)) fs.unlinkSync(OAUTH_STATE_FILE);
+  } catch {}
+}
+
+async function handleAuth(req, res, url) {
+  const relbase = require('./src/relbase');
+
+  if (req.method === 'GET' && url.pathname === '/auth/login') {
+    const state = crypto.randomBytes(24).toString('hex');
+    writeOAuthState(state);
+
+    const loginUrl = relbase.getAuthUrl(state);
+    return sendRedirect(res, loginUrl);
+  }
+
+  if (req.method === 'GET' && url.pathname === '/auth/callback') {
+    const error = url.searchParams.get('error');
+    const errorDescription = url.searchParams.get('error_description');
+
+    if (error) {
+      return sendText(
+        res,
+        400,
+        htmlPage('Relbase no autorizó la conexión', `${errorDescription || error}`),
+        'text/html; charset=utf-8'
+      );
+    }
+
+    const code = url.searchParams.get('code');
+    const state = url.searchParams.get('state');
+    const savedState = readOAuthState();
+
+    if (!code) {
+      return sendText(
+        res,
+        400,
+        htmlPage('Falta el código de autorización', 'Relbase no devolvió el código necesario para conectar.'),
+        'text/html; charset=utf-8'
+      );
+    }
+
+    if (!savedState || savedState.state !== state || new Date(savedState.expiresAt).getTime() < Date.now()) {
+      return sendText(
+        res,
+        400,
+        htmlPage('Autorización inválida o expirada', 'Vuelve a iniciar sesión desde /auth/login.'),
+        'text/html; charset=utf-8'
+      );
+    }
+
+    try {
+      const token = await relbase.exchangeCodeForToken(code);
+      clearOAuthState();
+
+      return sendText(
+        res,
+        200,
+        htmlPage(
+          'Relbase conectado correctamente',
+          'La autorización fue guardada. Ahora la app puede leer productos desde Relbase.',
+          `<pre>Token válido hasta: ${token.expires_at || 'sin fecha informada'}</pre>`
+        ),
+        'text/html; charset=utf-8'
+      );
+    } catch (authError) {
+      console.error(authError);
+      return sendText(
+        res,
+        500,
+        htmlPage('No se pudo conectar Relbase', authError.message || 'Error desconocido.'),
+        'text/html; charset=utf-8'
+      );
+    }
+  }
+
+  return sendJson(res, 404, { error: 'Ruta auth no encontrada.' });
+}
 
 function sendJson(res, code, payload) {
   const body = JSON.stringify(payload);
@@ -142,16 +302,42 @@ async function productSnapshot() {
 
 async function handleApi(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/status') {
-    return sendJson(res, 200, {
-      relbaseEnabled: CATALOG_MODE === 'relbase',
-      mode: CATALOG_MODE,
-      lastSyncAt: null,
-      syncStatus: CATALOG_MODE === 'relbase' ? 'Relbase configurado' : 'Modo demo: Relbase pendiente de conectar',
-      productCount: (await getCatalog()).length,
-      syncIntervalMinutes: SYNC_INTERVAL_MINUTES,
-      storage: DATA_DIR,
-    });
+  let relbaseStatus = null;
+  let productCount = 0;
+
+  try {
+    if (CATALOG_MODE === 'relbase') {
+      const relbase = require('./src/relbase');
+      relbaseStatus = relbase.status();
+
+      if (relbaseStatus.authorized) {
+        productCount = (await getCatalog()).length;
+      }
+    } else {
+      productCount = (await getCatalog()).length;
+    }
+  } catch (error) {
+    relbaseStatus = {
+      configured: true,
+      authorized: false,
+      error: error.message,
+    };
   }
+
+  return sendJson(res, 200, {
+    relbaseEnabled: CATALOG_MODE === 'relbase',
+    relbaseAuthorized: Boolean(relbaseStatus?.authorized),
+    relbaseStatus,
+    mode: CATALOG_MODE,
+    lastSyncAt: null,
+    syncStatus: CATALOG_MODE === 'relbase'
+      ? (relbaseStatus?.authorized ? 'Relbase conectado' : 'Relbase pendiente de autorización')
+      : 'Modo demo: Relbase pendiente de conectar',
+    productCount,
+    syncIntervalMinutes: SYNC_INTERVAL_MINUTES,
+    storage: DATA_DIR,
+  });
+}
 
   if (req.method === 'GET' && url.pathname === '/api/products/search') {
     const sku = normalizeSku(url.searchParams.get('sku'));
@@ -236,8 +422,9 @@ ensureLocationFile();
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
-    return serveStatic(res, url.pathname);
+    if (url.pathname.startsWith('/auth/')) return await handleAuth(req, res, url);
+if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
+return serveStatic(res, url.pathname);
   } catch (error) {
     console.error(error);
     return sendJson(res, 500, { error: error.message || 'Error interno del servidor.' });
