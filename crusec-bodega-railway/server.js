@@ -1,3 +1,13 @@
+/**
+ * Crusec Bodega
+ * Sistema desarrollado por David Navarro por iniciativa propia
+ * para apoyo interno de bodega Crusec Life Store.
+ *
+ * Nota de autoría:
+ * Este desarrollo, su estructura técnica y futuras mejoras quedan sujetos a acuerdo
+ * con David Navarro en caso de continuidad, modificación mayor, traspaso o uso
+ * fuera de la operación interna de bodega.
+ */
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
