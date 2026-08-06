@@ -253,10 +253,12 @@ function selectNextUnassigned(previousSku) {
 
 async function saveLocation() {
   if (!state.selectedProduct) return;
+
   const message = $('#admin-message');
   hideMessage(message);
+
   const previousSku = state.selectedProduct.sku;
-  const wasEditing = Boolean(state.selectedProduct.location);
+
   const payload = {
     aisle: $('#aisle-input').value,
     side: $('#side-input').value,
@@ -264,6 +266,34 @@ async function saveLocation() {
     level: $('#level-input').value,
     updatedBy: $('#updated-by-input').value,
   };
+
+  try {
+    const result = await api(`/api/products/${encodeURIComponent(previousSku)}/location`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+
+    showMessage(message, `${result.message} ${result.product.location.fullLabel}`, 'success');
+
+    if (state.searchedProduct?.sku === previousSku) {
+      state.searchedProduct = result.product;
+      renderSearchResult(result.product);
+    }
+
+    await loadProducts();
+
+    clearSelection();
+
+    if (window.matchMedia('(max-width: 860px)').matches) {
+      $('#product-list').scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    }
+  } catch (error) {
+    showMessage(message, error.message, 'error');
+  }
+}
 
   try {
     const result = await api(`/api/products/${encodeURIComponent(previousSku)}/location`, {
