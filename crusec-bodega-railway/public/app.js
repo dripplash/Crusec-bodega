@@ -135,9 +135,17 @@ async function openSearchedProductEditor() {
 async function loadProducts() {
   const filter = $('#admin-filter').value;
   const q = $('#admin-search').value.trim();
+
   const payload = await api(`/api/products?filter=${encodeURIComponent(filter)}&q=${encodeURIComponent(q)}`);
+
   state.products = payload.products;
-  $('#sync-status').textContent = `${payload.syncStatus} · Última sincronización: ${formatDate(payload.lastSyncAt)}`;
+
+  const statusText = payload.lastSyncAt
+    ? `● Relbase conectado\n${state.products.length} productos en esta vista\nÚltima actualización: ${formatDate(payload.lastSyncAt)}`
+    : `● Relbase conectado\n${state.products.length} productos en esta vista\nSin sincronización registrada`;
+
+  $('#sync-status').textContent = statusText;
+
   renderProductList();
 }
 
