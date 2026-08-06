@@ -529,3 +529,31 @@ body {
     font-size: 0.68rem;
   }
 }
+/* Ajuste móvil v14: al seleccionar producto, el formulario aparece arriba */
+@media (max-width: 860px) {
+  .admin-layout {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .assignment-card {
+    order: -1;
+    margin-bottom: 14px;
+  }
+
+  .assignment-card.empty {
+    display: none;
+  }
+
+  .assignment-card:not(.empty) {
+    display: block;
+  }
+
+  .product-list-card {
+    order: 0;
+  }
+
+  #assignment-card {
+    scroll-margin-top: 12px;
+  }
+}
