@@ -67,6 +67,7 @@ function saveToken(token, previous = null) {
 
 function tokenStillValid(token) {
   if (!token?.access_token || !token?.expires_at) return false;
+
   const expiresAt = new Date(token.expires_at).getTime();
   if (Number.isNaN(expiresAt)) return false;
 
@@ -106,7 +107,11 @@ async function requestToken(params) {
 
   if (!response.ok) {
     console.error('Error token Relbase:', response.status, payload);
-    throw new Error(payload.error_description || payload.error || `Relbase rechazó la solicitud de token (${response.status}).`);
+
+    const error = new Error(payload.error_description || payload.error || `Relbase rechazó la solicitud de token (${response.status}).`);
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
   }
 
   if (!payload.access_token) {
@@ -192,13 +197,31 @@ function firstValue(...values) {
   return '';
 }
 
+function cleanText(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/^["']+|["']+$/g, '')
+    .trim();
+}
+
+function cleanSku(value) {
+  return cleanText(value).toUpperCase();
+}
+
 function nestedName(value) {
   if (!value) return '';
 
   if (typeof value === 'string') return value;
 
   if (typeof value === 'object') {
-    return firstValue(value.nombre, value.name, value.descripcion, value.description);
+    return firstValue(
+      value.nombre,
+      value.name,
+      value.descripcion,
+      value.description,
+      value.label,
+      value.title
+    );
   }
 
   return '';
@@ -207,7 +230,7 @@ function nestedName(value) {
 function numberOrNull(value) {
   if (value === undefined || value === null || value === '') return null;
 
-  const number = Number(value);
+  const number = Number(String(value).replace(',', '.'));
   return Number.isFinite(number) ? number : null;
 }
 
@@ -221,12 +244,20 @@ function sumStockArray(items) {
     const qty = numberOrNull(firstValue(
       item.stock,
       item.stock_total,
+      item.stockTotal,
       item.stock_disponible,
+      item.stockDisponible,
       item.disponible,
       item.cantidad,
       item.quantity,
       item.qty,
-      item.saldo
+      item.saldo,
+      item.balance,
+      item.on_hand,
+      item.onHand,
+      item.available,
+      item.available_quantity,
+      item.availableQuantity
     ));
 
     if (qty !== null) {
@@ -242,12 +273,20 @@ function detectStock(product) {
   const direct = numberOrNull(firstValue(
     product.stock,
     product.stock_total,
+    product.stockTotal,
     product.stock_disponible,
+    product.stockDisponible,
     product.disponible,
     product.cantidad,
     product.quantity,
     product.qty,
-    product.saldo
+    product.saldo,
+    product.balance,
+    product.on_hand,
+    product.onHand,
+    product.available,
+    product.available_quantity,
+    product.availableQuantity
   ));
 
   if (direct !== null) return direct;
@@ -255,58 +294,86 @@ function detectStock(product) {
   return (
     sumStockArray(product.inventarios) ??
     sumStockArray(product.inventory) ??
+    sumStockArray(product.inventories) ??
     sumStockArray(product.stocks) ??
     sumStockArray(product.bodegas) ??
     sumStockArray(product.warehouses) ??
     sumStockArray(product.stock_bodegas) ??
     sumStockArray(product.stockBodegas) ??
+    sumStockArray(product.variants) ??
     null
   );
 }
 
+function detectBrand(product) {
+  return cleanText(firstValue(
+    product.marca,
+    product.brand,
+    product.marca_nombre,
+    product.marcaNombre,
+    product.brand_name,
+    product.brandName,
+    product.fabricante,
+    product.manufacturer,
+    nestedName(product.marca),
+    nestedName(product.brand),
+    nestedName(product.fabricante),
+    nestedName(product.manufacturer)
+  ));
+}
+
 function normalizeProduct(product) {
-  const sku = String(firstValue(
+  const sku = cleanSku(firstValue(
     product.sku,
     product.SKU,
     product.codigo,
     product.código,
     product.codigo_sku,
+    product.codigoSku,
     product.codigo_producto,
     product.codigoProducto,
     product.code,
     product.internal_code,
+    product.internalCode,
     product.barcode,
     product.codigo_barras,
+    product.codigoBarras,
+    product.codigo_barra,
+    product.codigoBarra,
     product.id
-  )).trim().toUpperCase();
+  ));
 
-  const name = String(firstValue(
+  const name = cleanText(firstValue(
     product.nombre,
     product.name,
     product.descripcion,
     product.description,
     product.titulo,
     product.title,
+    product.nombre_producto,
+    product.nombreProducto,
     `Producto ${sku}`
-  )).trim();
+  ));
 
-  const barcode = String(firstValue(
+  const barcode = cleanText(firstValue(
     product.barcode,
     product.codigo_barras,
+    product.codigoBarras,
     product.codigoBarra,
     product.codigo_barra,
     product.ean,
     product.upc
-  )).trim();
+  ));
 
-  const brand = String(firstValue(
-    product.marca,
-    product.brand,
-    nestedName(product.marca),
-    nestedName(product.brand)
-  )).trim();
+  const brand = detectBrand(product);
 
-  const activeValue = firstValue(product.active, product.activo, product.estado, product.status, true);
+  const activeValue = firstValue(
+    product.active,
+    product.activo,
+    product.estado,
+    product.status,
+    true
+  );
 
   const active = typeof activeValue === 'boolean'
     ? activeValue
@@ -320,7 +387,7 @@ function normalizeProduct(product) {
     brand,
     active,
     stock: detectStock(product),
-    stockUpdatedAt: product.stockUpdatedAt || product.updated_at || product.fecha_actualizacion || null,
+    stockUpdatedAt: product.stockUpdatedAt || product.updated_at || product.updatedAt || product.fecha_actualizacion || null,
   };
 }
 
@@ -336,10 +403,38 @@ function extractProducts(payload) {
 
   if (payload.data && typeof payload.data === 'object') {
     if (Array.isArray(payload.data.resources)) return payload.data.resources;
+    if (Array.isArray(payload.data.productos)) return payload.data.productos;
+    if (Array.isArray(payload.data.products)) return payload.data.products;
+
     return extractProducts(payload.data);
   }
 
   return [];
+}
+
+function logDebugRelbase(payload, url) {
+  if (global.__RELBASE_DEBUG_LOGGED__) return;
+
+  global.__RELBASE_DEBUG_LOGGED__ = true;
+
+  const sampleProducts = extractProducts(payload);
+  const first = sampleProducts[0];
+
+  console.log('========== DEBUG RELBASE ==========');
+  console.log('URL consultada:', url);
+  console.log('Campos principales de respuesta:', Object.keys(payload || {}));
+  console.log('Meta:', JSON.stringify(payload?.meta || payload?.pagination || {}, null, 2));
+  console.log('Cantidad en esta página:', sampleProducts.length);
+
+  if (first) {
+    console.log('Campos del primer producto:', Object.keys(first));
+    console.log('Primer producto muestra:', JSON.stringify(first, null, 2).slice(0, 6000));
+  } else {
+    console.log('No se encontró producto de muestra en esta página.');
+    console.log('Respuesta muestra:', JSON.stringify(payload, null, 2).slice(0, 6000));
+  }
+
+  console.log('======== FIN DEBUG RELBASE ========');
 }
 
 async function fetchProductsPage(url, accessToken) {
@@ -361,8 +456,14 @@ async function fetchProductsPage(url, accessToken) {
 
   if (!response.ok) {
     console.error('Error productos Relbase:', response.status, payload);
-    throw new Error(payload.error_description || payload.error || `Relbase rechazó la consulta de productos (${response.status}).`);
+
+    const error = new Error(payload.error_description || payload.error || `Relbase rechazó la consulta de productos (${response.status}).`);
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
   }
+
+  logDebugRelbase(payload, url);
 
   return payload;
 }
@@ -416,7 +517,7 @@ function nextPageUrl(payload, currentUrl) {
 }
 
 async function listProducts() {
-  const accessToken = await getValidAccessToken();
+  let accessToken = await getValidAccessToken();
 
   let url = RELBASE_PRODUCTS_URL;
   const all = [];
@@ -426,7 +527,21 @@ async function listProducts() {
     if (seenUrls.has(url)) break;
     seenUrls.add(url);
 
-    const payload = await fetchProductsPage(url, accessToken);
+    let payload;
+
+    try {
+      payload = await fetchProductsPage(url, accessToken);
+    } catch (error) {
+      if (error.status === 401) {
+        console.warn('Relbase respondió 401. Renovando token e intentando nuevamente...');
+        const refreshed = await refreshAccessToken();
+        accessToken = refreshed.access_token;
+        payload = await fetchProductsPage(url, accessToken);
+      } else {
+        throw error;
+      }
+    }
+
     const products = extractProducts(payload);
     all.push(...products);
 
