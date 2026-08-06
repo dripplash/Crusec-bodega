@@ -677,3 +677,10 @@ body {
   background: #ef4444;
   box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.14);
 }
+
+.copyright {
+  margin: 10px 0 0;
+  font-size: 0.78rem;
+  color: #64748b;
+  line-height: 1.4;
+}
