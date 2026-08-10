@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#111827" />
+  <title>Crusec · Ubicaciones de bodega</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+  <link rel="apple-touch-icon" href="/favicon.png" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <img class="brand-logo" src="/crusec-logo.png" alt="Crusec Life Store" />
+    <nav class="tabs" aria-label="Secciones">
+      <button class="tab active" data-view="search">Buscar producto</button>
+      <button class="tab" data-view="admin">Asignar o editar ubicaciones</button>
+      <button class="tab" data-view="special">Ubicaciones especiales</button>
+    </nav>
+  </header>
+
+  <main>
+    <h1 class="page-title">Ubicaciones de bodega</h1>
+    <section id="search-view" class="view active">
+      <div class="hero-card">
+        <div class="hero-copy">
+          <span class="pill">Búsqueda rápida</span>
+          <h2>Escribe el SKU y encuentra el producto.</h2>
+          <p>También puedes escanear el código de barras si el lector escribe en el campo.</p>
+        </div>
+        <form id="search-form" class="search-form">
+          <label for="sku-search">SKU o código de barras</label>
+          <div class="search-row">
+            <input id="sku-search" name="sku" autocomplete="off" autofocus placeholder="Ejemplo: C02140" />
+            <button type="submit" class="primary-button">Buscar</button>
+          </div>
+        </form>
+      </div>
+
+      <div id="search-message" class="message hidden" role="status"></div>
+
+      <article id="search-result" class="result-card hidden" aria-live="polite">
+        <div class="result-header">
+          <div>
+            <p class="eyebrow">PRODUCTO ENCONTRADO</p>
+            <h2 id="result-name"></h2>
+            <p id="result-sku" class="muted"></p>
+            <p id="result-brand" class="brand-line"></p>
+          </div>
+          <div class="stock-box">
+            <span>Stock en Relbase</span>
+            <strong id="result-stock">—</strong>
+            <small id="result-stock-time">Sin información</small>
+          </div>
+        </div>
+
+        <div id="location-panel" class="location-panel">
+          <p class="location-title">UBICACIÓN</p>
+          <div class="location-grid">
+            <div><span>Pasillo</span><strong id="result-aisle">—</strong></div>
+            <div><span>Lado</span><strong id="result-side">—</strong></div>
+            <div><span>Rack</span><strong id="result-rack">—</strong></div>
+            <div><span>Nivel</span><strong id="result-level">—</strong></div>
+          </div>
+          <p id="result-location-full" class="location-full"></p>
+        </div>
+        <div class="result-actions">
+          <button id="edit-result-button" class="secondary-button" type="button">Asignar o editar ubicación</button>
+        </div>
+      </article>
+    </section>
+
+    <section id="admin-view" class="view">
+      <div id="admin-panel">
+        <div class="admin-toolbar">
+          <div>
+            <p class="eyebrow">UBICACIONES COMPARTIDAS</p>
+            <h2>Asignar o editar ubicaciones</h2>
+            <p class="muted">Todos pueden agregar y corregir ubicaciones. El stock continúa viniendo desde Relbase.</p>
+            <p id="sync-status" class="muted"></p>
+          </div>
+          <div class="toolbar-actions">
+            <button id="sync-button" class="secondary-button">Sincronizar con Relbase</button>
+          </div>
+        </div>
+
+        <div class="filters-card">
+          <input id="admin-search" placeholder="Buscar SKU, nombre o marca" autocomplete="off" />
+          <select id="admin-filter">
+            <option value="all">Todos los productos</option>
+            <option value="unassigned">Sin ubicación</option>
+            <option value="assigned">Con ubicación</option>
+            <option value="with-stock" selected>Con stock</option>
+            <option value="without-stock">Sin stock</option>
+          </select>
+          <button id="refresh-button" class="ghost-button">Actualizar lista</button>
+        </div>
+
+        <div id="admin-message" class="message hidden" role="status"></div>
+
+        <div class="admin-layout">
+          <section class="product-list-card">
+            <div class="section-heading">
+              <h3>Productos</h3>
+              <span id="product-count" class="count-badge">0</span>
+            </div>
+            <div id="product-list" class="product-list"></div>
+          </section>
+
+          <section id="assignment-card" class="assignment-card empty">
+            <div id="assignment-empty">
+              <h3>Selecciona un producto</h3>
+              <p>Elige un SKU para agregar o corregir su ubicación.</p>
+            </div>
+
+            <div id="assignment-content" class="hidden">
+              <p id="assignment-mode" class="eyebrow">ASIGNAR UBICACIÓN</p>
+              <h3 id="assign-name"></h3>
+              <p id="assign-sku" class="muted"></p>
+              <p id="assign-brand" class="brand-line"></p>
+              <div class="assign-stock">
+                <span>Stock actual en Relbase</span>
+                <strong id="assign-stock">—</strong>
+              </div>
+
+              <form id="assignment-form" class="assignment-form">
+                <label>
+                  <span>Pasillo</span>
+                  <input id="aisle-input" name="aisle" type="number" min="1" max="6" inputmode="numeric" placeholder="1" />
+                </label>
+                <label>
+                  <span>Lado</span>
+                  <input id="side-input" name="side" maxlength="1" autocomplete="off" placeholder="D o I" />
+                  <small>D = Derecho · I = Izquierdo</small>
+                </label>
+                <label>
+                  <span>Rack</span>
+                  <input id="rack-input" name="rack" type="number" min="1" max="11" inputmode="numeric" placeholder="1" />
+                </label>
+                <label>
+                  <span>Nivel</span>
+                  <input id="level-input" name="level" type="number" min="1" max="6" inputmode="numeric" placeholder="1" />
+                </label>
+                <label>
+                  <span>Tu nombre (opcional)</span>
+                  <input id="updated-by-input" name="updatedBy" autocomplete="name" placeholder="Para saber quién hizo el cambio" />
+                </label>
+                <button id="save-location-button" class="primary-button wide" type="submit">Guardar ubicación</button>
+                <button id="delete-location-button" class="danger-button wide hidden" type="button">Quitar ubicación actual</button>
+              </form>
+              <p class="keyboard-tip">Usa <kbd>Enter</kbd> para avanzar automáticamente entre Pasillo, Lado, Rack y Nivel. Al guardar una ubicación existente, esta se reemplaza por la nueva.</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section id="special-view" class="view">
+      <div class="special-toolbar">
+        <div>
+          <p class="eyebrow">FUERA DE LA BODEGA PRINCIPAL</p>
+          <h2>Ubicaciones especiales</h2>
+          <p class="muted">Organiza productos de las piezas y del segundo piso usando el mismo catálogo conectado a Relbase.</p>
+        </div>
+      </div>
+
+      <div id="special-message" class="message hidden" role="status"></div>
+
+      <div class="special-area-grid" id="special-area-grid">
+        <button class="special-area-card active" type="button" data-area="pieza1"><strong>Pieza 1</strong><span>Estantes 1, 2 y 3</span></button>
+        <button class="special-area-card" type="button" data-area="pieza2"><strong>Pieza 2</strong><span>Estantes 1, 2 y 3</span></button>
+        <button class="special-area-card" type="button" data-area="pieza3"><strong>Pieza 3</strong><span>Estantes 1, 2 y 3</span></button>
+        <button class="special-area-card" type="button" data-area="segundoPiso"><strong>Segundo piso</strong><span>Pieza y Estante 1</span></button>
+      </div>
+
+      <div class="special-spot-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">SELECCIONA LA ZONA</p>
+            <h3 id="special-area-title">Pieza 1</h3>
+          </div>
+        </div>
+        <div id="special-spot-buttons" class="special-spot-buttons"></div>
+      </div>
+
+      <div class="special-layout">
+        <section class="special-assign-card">
+          <p class="eyebrow">ASIGNAR PRODUCTO</p>
+          <h3 id="special-current-title">Pieza 1 — Estante 1</h3>
+          <form id="special-search-form" class="special-search-form">
+            <label for="special-sku-search">Buscar SKU o código de barras</label>
+            <div class="search-row">
+              <input id="special-sku-search" autocomplete="off" placeholder="Ejemplo: C02140" />
+              <button class="primary-button" type="submit">Buscar</button>
+            </div>
+          </form>
+
+          <article id="special-product-result" class="special-product-result hidden">
+            <div>
+              <h3 id="special-product-name"></h3>
+              <p id="special-product-sku" class="muted"></p>
+              <p id="special-product-brand" class="brand-line"></p>
+            </div>
+            <div class="stock-chip-large">Stock <strong id="special-product-stock">—</strong></div>
+            <label class="special-updated-by">
+              <span>Tu nombre (opcional)</span>
+              <input id="special-updated-by" autocomplete="name" placeholder="Para saber quién hizo el cambio" />
+            </label>
+            <button id="special-save-button" type="button" class="primary-button wide">Asignar a esta ubicación</button>
+          </article>
+        </section>
+
+        <section class="special-list-card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">PRODUCTOS UBICADOS AQUÍ</p>
+              <h3 id="special-list-title">Pieza 1 — Estante 1</h3>
+            </div>
+            <span id="special-count" class="count-badge">0</span>
+          </div>
+          <div id="special-product-list" class="special-product-list"></div>
+        </section>
+      </div>
+    </section>
+
+  </main>
+
+ <footer>
+  <span id="connection-indicator" class="connection-indicator">Comprobando conexión…</span>
+  <p class="copyright">
+    © 2026 Crusec Life Store. Todos los derechos reservados.
+    <br />
+    Sistema interno de ubicaciones de bodega.
+  </p>
+</footer>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
