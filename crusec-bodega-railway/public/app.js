@@ -13,6 +13,9 @@ const state = {
   selectedProduct: null,
   searchedProduct: null,
   status: null,
+  specialArea: 'pieza1',
+  specialSpot: 'estante1',
+  specialProduct: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -78,6 +81,10 @@ function showView(viewName) {
   if (viewName === 'search') {
     setTimeout(() => $('#sku-search').focus(), 30);
   }
+
+  if (viewName === 'special') {
+    setTimeout(() => $('#special-sku-search').focus(), 30);
+  }
 }
 
 async function setView(viewName) {
@@ -88,6 +95,15 @@ async function setView(viewName) {
       await loadProducts();
     } catch (error) {
       showMessage($('#admin-message'), error.message, 'error');
+    }
+  }
+
+  if (viewName === 'special') {
+    try {
+      renderSpecialSpots();
+      await loadSpecialProducts();
+    } catch (error) {
+      showMessage($('#special-message'), error.message, 'error');
     }
   }
 }
@@ -447,6 +463,132 @@ async function deleteLocation() {
   }
 }
 
+
+const SPECIAL_AREAS = {
+  pieza1: { label: 'Pieza 1', spots: { estante1: 'Estante 1', estante2: 'Estante 2', estante3: 'Estante 3' } },
+  pieza2: { label: 'Pieza 2', spots: { estante1: 'Estante 1', estante2: 'Estante 2', estante3: 'Estante 3' } },
+  pieza3: { label: 'Pieza 3', spots: { estante1: 'Estante 1', estante2: 'Estante 2', estante3: 'Estante 3' } },
+  segundoPiso: { label: 'Segundo piso', spots: { pieza: 'Pieza', estante1: 'Estante 1' } },
+};
+
+function currentSpecialLabel() {
+  const area = SPECIAL_AREAS[state.specialArea];
+  return `${area.label} — ${area.spots[state.specialSpot]}`;
+}
+
+function renderSpecialSpots() {
+  const area = SPECIAL_AREAS[state.specialArea];
+  if (!area.spots[state.specialSpot]) state.specialSpot = Object.keys(area.spots)[0];
+
+  $$('.special-area-card').forEach((button) => {
+    button.classList.toggle('active', button.dataset.area === state.specialArea);
+  });
+
+  $('#special-area-title').textContent = area.label;
+  $('#special-current-title').textContent = currentSpecialLabel();
+  $('#special-list-title').textContent = currentSpecialLabel();
+
+  const container = $('#special-spot-buttons');
+  container.innerHTML = '';
+  for (const [spot, label] of Object.entries(area.spots)) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `special-spot-button${state.specialSpot === spot ? ' active' : ''}`;
+    button.textContent = label;
+    button.addEventListener('click', async () => {
+      state.specialSpot = spot;
+      state.specialProduct = null;
+      $('#special-product-result').classList.add('hidden');
+      hideMessage($('#special-message'));
+      renderSpecialSpots();
+      await loadSpecialProducts();
+    });
+    container.appendChild(button);
+  }
+}
+
+async function searchSpecialProduct(code) {
+  hideMessage($('#special-message'));
+  $('#special-product-result').classList.add('hidden');
+  try {
+    const { product } = await api(`/api/products/search?sku=${encodeURIComponent(code)}`);
+    state.specialProduct = product;
+    $('#special-product-name').textContent = product.name;
+    $('#special-product-sku').textContent = `SKU: ${product.sku}`;
+    $('#special-product-brand').textContent = `Marca: ${product.brand || brandFromCode(product.sku)}`;
+    $('#special-product-stock').textContent = product.stock === null || product.stock === undefined ? '—' : product.stock;
+    $('#special-save-button').textContent = `Asignar a ${currentSpecialLabel()}`;
+    $('#special-product-result').classList.remove('hidden');
+  } catch (error) {
+    state.specialProduct = null;
+    showMessage($('#special-message'), error.message, 'error');
+  }
+}
+
+async function saveSpecialLocation() {
+  if (!state.specialProduct) return;
+  const message = $('#special-message');
+  hideMessage(message);
+  try {
+    const result = await api(`/api/products/${encodeURIComponent(state.specialProduct.sku)}/special-location`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        area: state.specialArea,
+        spot: state.specialSpot,
+        updatedBy: $('#special-updated-by').value,
+      }),
+    });
+    showMessage(message, `${result.message} ${result.item.specialLocation.fullLabel}`, 'success');
+    state.specialProduct = null;
+    $('#special-product-result').classList.add('hidden');
+    $('#special-sku-search').value = '';
+    await loadSpecialProducts();
+    $('#special-sku-search').focus();
+  } catch (error) {
+    showMessage(message, error.message, 'error');
+  }
+}
+
+async function loadSpecialProducts() {
+  const payload = await api(`/api/special-locations?area=${encodeURIComponent(state.specialArea)}&spot=${encodeURIComponent(state.specialSpot)}`);
+  const list = $('#special-product-list');
+  list.innerHTML = '';
+  $('#special-count').textContent = payload.items.length;
+  $('#special-list-title').textContent = currentSpecialLabel();
+
+  if (!payload.items.length) {
+    list.innerHTML = '<p class="muted">Todavía no hay productos asignados a esta ubicación.</p>';
+    return;
+  }
+
+  for (const item of payload.items) {
+    const card = document.createElement('div');
+    card.className = 'special-product-item';
+    const stock = item.stock === null || item.stock === undefined ? '—' : item.stock;
+    card.innerHTML = `
+      <div class="special-product-copy">
+        <strong>${escapeHtml(item.name)}</strong>
+        <small>SKU: ${escapeHtml(item.sku)}</small>
+        <small class="brand-small">Marca: ${escapeHtml(item.brand || brandFromCode(item.sku))}</small>
+      </div>
+      <span class="stock-chip">Stock ${escapeHtml(stock)}</span>
+      <button class="danger-button special-remove-button" type="button">Quitar</button>
+    `;
+    card.querySelector('.special-remove-button').addEventListener('click', async () => {
+      const accepted = confirm(`¿Quitar ${item.sku} de ${currentSpecialLabel()}?`);
+      if (!accepted) return;
+      try {
+        await api(`/api/products/${encodeURIComponent(item.sku)}/special-location`, { method: 'DELETE' });
+        showMessage($('#special-message'), 'Ubicación especial eliminada.', 'success');
+        await loadSpecialProducts();
+      } catch (error) {
+        showMessage($('#special-message'), error.message, 'error');
+      }
+    });
+    list.appendChild(card);
+  }
+}
+
 function debounce(fn, delay) {
   let timer;
 
@@ -502,6 +644,32 @@ function setupEvents() {
   $('#refresh-button').addEventListener('click', loadProducts);
   $('#sync-button').addEventListener('click', syncRelbase);
   $('#delete-location-button').addEventListener('click', deleteLocation);
+
+  $$('.special-area-card').forEach((button) => {
+    button.addEventListener('click', async () => {
+      state.specialArea = button.dataset.area;
+      state.specialSpot = Object.keys(SPECIAL_AREAS[state.specialArea].spots)[0];
+      state.specialProduct = null;
+      $('#special-product-result').classList.add('hidden');
+      hideMessage($('#special-message'));
+      renderSpecialSpots();
+      await loadSpecialProducts();
+    });
+  });
+
+  $('#special-search-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const code = $('#special-sku-search').value.trim().toUpperCase();
+    $('#special-sku-search').value = code;
+    if (!code) return showMessage($('#special-message'), 'Debes ingresar un SKU.', 'warning');
+    searchSpecialProduct(code);
+  });
+
+  $('#special-sku-search').addEventListener('input', (event) => {
+    event.target.value = event.target.value.toUpperCase().replace(/\s+/g, '');
+  });
+
+  $('#special-save-button').addEventListener('click', saveSpecialLocation);
 }
 
 setupEvents();

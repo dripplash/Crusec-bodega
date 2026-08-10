@@ -16,6 +16,7 @@
     <nav class="tabs" aria-label="Secciones">
       <button class="tab active" data-view="search">Buscar producto</button>
       <button class="tab" data-view="admin">Asignar o editar ubicaciones</button>
+      <button class="tab" data-view="special">Ubicaciones especiales</button>
     </nav>
   </header>
 
@@ -154,6 +155,75 @@
         </div>
       </div>
     </section>
+
+    <section id="special-view" class="view">
+      <div class="special-toolbar">
+        <div>
+          <p class="eyebrow">FUERA DE LA BODEGA PRINCIPAL</p>
+          <h2>Ubicaciones especiales</h2>
+          <p class="muted">Organiza productos de las piezas y del segundo piso usando el mismo catálogo conectado a Relbase.</p>
+        </div>
+      </div>
+
+      <div id="special-message" class="message hidden" role="status"></div>
+
+      <div class="special-area-grid" id="special-area-grid">
+        <button class="special-area-card active" type="button" data-area="pieza1"><strong>Pieza 1</strong><span>Estantes 1, 2 y 3</span></button>
+        <button class="special-area-card" type="button" data-area="pieza2"><strong>Pieza 2</strong><span>Estantes 1, 2 y 3</span></button>
+        <button class="special-area-card" type="button" data-area="pieza3"><strong>Pieza 3</strong><span>Estantes 1, 2 y 3</span></button>
+        <button class="special-area-card" type="button" data-area="segundoPiso"><strong>Segundo piso</strong><span>Pieza y Estante 1</span></button>
+      </div>
+
+      <div class="special-spot-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">SELECCIONA LA ZONA</p>
+            <h3 id="special-area-title">Pieza 1</h3>
+          </div>
+        </div>
+        <div id="special-spot-buttons" class="special-spot-buttons"></div>
+      </div>
+
+      <div class="special-layout">
+        <section class="special-assign-card">
+          <p class="eyebrow">ASIGNAR PRODUCTO</p>
+          <h3 id="special-current-title">Pieza 1 — Estante 1</h3>
+          <form id="special-search-form" class="special-search-form">
+            <label for="special-sku-search">Buscar SKU o código de barras</label>
+            <div class="search-row">
+              <input id="special-sku-search" autocomplete="off" placeholder="Ejemplo: C02140" />
+              <button class="primary-button" type="submit">Buscar</button>
+            </div>
+          </form>
+
+          <article id="special-product-result" class="special-product-result hidden">
+            <div>
+              <h3 id="special-product-name"></h3>
+              <p id="special-product-sku" class="muted"></p>
+              <p id="special-product-brand" class="brand-line"></p>
+            </div>
+            <div class="stock-chip-large">Stock <strong id="special-product-stock">—</strong></div>
+            <label class="special-updated-by">
+              <span>Tu nombre (opcional)</span>
+              <input id="special-updated-by" autocomplete="name" placeholder="Para saber quién hizo el cambio" />
+            </label>
+            <button id="special-save-button" type="button" class="primary-button wide">Asignar a esta ubicación</button>
+          </article>
+        </section>
+
+        <section class="special-list-card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">PRODUCTOS UBICADOS AQUÍ</p>
+              <h3 id="special-list-title">Pieza 1 — Estante 1</h3>
+            </div>
+            <span id="special-count" class="count-badge">0</span>
+          </div>
+          <div id="special-product-list" class="special-product-list"></div>
+        </section>
+      </div>
+    </section>
+
   </main>
 
  <footer>

@@ -46,6 +46,7 @@ const PROJECT_DATA_DIR = path.join(__dirname, 'data');
 const DATA_DIR = path.resolve(process.env.DATA_DIR || PROJECT_DATA_DIR);
 
 const LOCATIONS_FILE = path.join(DATA_DIR, 'locations.json');
+const SPECIAL_LOCATIONS_FILE = path.join(DATA_DIR, 'special-locations.json');
 const PRODUCT_CACHE_FILE = path.join(DATA_DIR, 'products-cache.json');
 const OAUTH_STATE_FILE = path.join(DATA_DIR, 'relbase-oauth-state.json');
 
@@ -107,6 +108,57 @@ function writeLocations(db) {
   const tmp = `${LOCATIONS_FILE}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
   fs.renameSync(tmp, LOCATIONS_FILE);
+}
+
+function ensureSpecialLocationsFile() {
+  ensureDataDir();
+  if (!fs.existsSync(SPECIAL_LOCATIONS_FILE)) {
+    fs.writeFileSync(SPECIAL_LOCATIONS_FILE, JSON.stringify({ locations: {} }, null, 2));
+  }
+}
+
+function readSpecialLocations() {
+  ensureSpecialLocationsFile();
+  try {
+    const parsed = JSON.parse(fs.readFileSync(SPECIAL_LOCATIONS_FILE, 'utf8'));
+    return {
+      locations: parsed.locations && typeof parsed.locations === 'object' ? parsed.locations : {},
+    };
+  } catch (error) {
+    console.error('Error leyendo ubicaciones especiales:', error);
+    return { locations: {} };
+  }
+}
+
+function writeSpecialLocations(db) {
+  ensureSpecialLocationsFile();
+  const tmp = `${SPECIAL_LOCATIONS_FILE}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
+  fs.renameSync(tmp, SPECIAL_LOCATIONS_FILE);
+}
+
+const SPECIAL_AREAS = {
+  pieza1: { label: 'Pieza 1', spots: { estante1: 'Estante 1', estante2: 'Estante 2', estante3: 'Estante 3' } },
+  pieza2: { label: 'Pieza 2', spots: { estante1: 'Estante 1', estante2: 'Estante 2', estante3: 'Estante 3' } },
+  pieza3: { label: 'Pieza 3', spots: { estante1: 'Estante 1', estante2: 'Estante 2', estante3: 'Estante 3' } },
+  segundoPiso: { label: 'Segundo piso', spots: { pieza: 'Pieza', estante1: 'Estante 1' } },
+};
+
+function validateSpecialLocation(input) {
+  const area = String(input.area || '').trim();
+  const spot = String(input.spot || '').trim();
+  const areaConfig = SPECIAL_AREAS[area];
+
+  if (!areaConfig) return 'Selecciona una ubicación especial válida.';
+  if (!areaConfig.spots[spot]) return 'Selecciona una zona válida dentro de la ubicación especial.';
+
+  return {
+    area,
+    areaLabel: areaConfig.label,
+    spot,
+    spotLabel: areaConfig.spots[spot],
+    fullLabel: `${areaConfig.label} — ${areaConfig.spots[spot]}`,
+  };
 }
 
 function readDemoProducts() {
@@ -513,6 +565,7 @@ async function handleApi(req, res, url) {
       syncIntervalMinutes: SYNC_INTERVAL_MINUTES,
       storage: DATA_DIR,
       cacheFile: CATALOG_MODE === 'relbase' ? PRODUCT_CACHE_FILE : null,
+      specialLocationsFile: SPECIAL_LOCATIONS_FILE,
     });
   }
 
@@ -650,6 +703,85 @@ async function handleApi(req, res, url) {
       product: publicProduct(mergeLocation(base, db)),
       message: 'Ubicación eliminada.',
     });
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/special-locations/options') {
+    return sendJson(res, 200, { areas: SPECIAL_AREAS });
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/special-locations') {
+    const area = String(url.searchParams.get('area') || '').trim();
+    const spot = String(url.searchParams.get('spot') || '').trim();
+    const q = String(url.searchParams.get('q') || '').trim().toUpperCase();
+    const db = readSpecialLocations();
+    const catalog = await getCatalog();
+    const bySku = new Map(catalog.map((p) => [normalizeSku(p.sku), p]));
+
+    let items = Object.entries(db.locations).map(([sku, saved]) => {
+      const base = bySku.get(normalizeSku(sku));
+      return {
+        sku: normalizeSku(sku),
+        name: base?.name || 'Producto no disponible en catálogo',
+        brand: base?.brand || brandFromCode(sku),
+        stock: base?.stock ?? null,
+        specialLocation: saved.specialLocation || null,
+        specialLocationUpdatedAt: saved.specialLocationUpdatedAt || null,
+        specialLocationUpdatedBy: saved.specialLocationUpdatedBy || null,
+      };
+    });
+
+    if (area) items = items.filter((item) => item.specialLocation?.area === area);
+    if (spot) items = items.filter((item) => item.specialLocation?.spot === spot);
+    if (q) {
+      items = items.filter((item) =>
+        item.sku.includes(q) ||
+        String(item.name || '').toUpperCase().includes(q) ||
+        String(item.brand || '').toUpperCase().includes(q)
+      );
+    }
+
+    items.sort((a, b) => a.sku.localeCompare(b.sku));
+    return sendJson(res, 200, { items });
+  }
+
+  const specialMatch = url.pathname.match(/^\/api\/products\/([^/]+)\/special-location$/);
+
+  if (specialMatch && req.method === 'PUT') {
+    const sku = normalizeSku(decodeURIComponent(specialMatch[1]));
+    const products = await getCatalog();
+    const base = products.find((p) => normalizeSku(p.sku) === sku);
+    if (!base) return sendJson(res, 404, { error: 'Producto no encontrado.' });
+
+    const body = await readBody(req);
+    const specialLocation = validateSpecialLocation(body);
+    if (typeof specialLocation === 'string') return sendJson(res, 400, { error: specialLocation });
+
+    const db = readSpecialLocations();
+    db.locations[sku] = {
+      specialLocation,
+      specialLocationUpdatedAt: new Date().toISOString(),
+      specialLocationUpdatedBy: String(body.updatedBy || 'Sin identificar').trim() || 'Sin identificar',
+    };
+    writeSpecialLocations(db);
+
+    return sendJson(res, 200, {
+      item: {
+        sku,
+        name: base.name || 'Producto sin nombre',
+        brand: base.brand || brandFromCode(sku),
+        stock: base.stock ?? null,
+        ...db.locations[sku],
+      },
+      message: 'Ubicación especial guardada correctamente.',
+    });
+  }
+
+  if (specialMatch && req.method === 'DELETE') {
+    const sku = normalizeSku(decodeURIComponent(specialMatch[1]));
+    const db = readSpecialLocations();
+    delete db.locations[sku];
+    writeSpecialLocations(db);
+    return sendJson(res, 200, { message: 'Ubicación especial eliminada.' });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/sync') {
