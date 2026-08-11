@@ -30,10 +30,11 @@
           <h2>Escribe el SKU y encuentra el producto.</h2>
           <p>La búsqueda principal revisa la bodega normal y también las ubicaciones especiales.</p>
         </div>
+
         <form id="search-form" class="search-form">
-          <label for="sku-search">SKU o código de barras</label>
+          <label for="sku-search">Buscar SKU o nombre del producto</label>
           <div class="search-row">
-            <input id="sku-search" name="sku" autocomplete="off" autofocus placeholder="Ejemplo: C02140" />
+            <input id="sku-search" name="sku" autocomplete="off" autofocus placeholder="Ejemplo: C02140 o nombre del producto" />
             <button type="submit" class="primary-button">Buscar</button>
           </div>
         </form>
@@ -48,6 +49,7 @@
             <h2 id="result-name"></h2>
             <p id="result-sku" class="muted"></p>
             <p id="result-brand" class="brand-line"></p>
+            <p id="result-update-line" class="result-update-line hidden"></p>
           </div>
 
           <div class="stock-box stock-first">
@@ -76,6 +78,7 @@
           <p class="muted">Usa esta sección para Pasillo, Lado, Rack y Nivel. Si el producto estaba en una ubicación especial, esta se reemplaza.</p>
           <p id="sync-status" class="muted"></p>
         </div>
+
         <div class="toolbar-actions">
           <button id="sync-button" class="secondary-button">Sincronizar con Relbase</button>
         </div>
@@ -117,10 +120,12 @@
             <h3 id="assign-name"></h3>
             <p id="assign-sku" class="muted"></p>
             <p id="assign-brand" class="brand-line"></p>
+
             <div class="assign-stock">
               <span>Stock actual en Relbase</span>
               <strong id="assign-stock">—</strong>
             </div>
+
             <p id="assignment-current-location" class="inline-note hidden"></p>
 
             <form id="assignment-form" class="assignment-form">
@@ -128,26 +133,32 @@
                 <span>Pasillo</span>
                 <input id="aisle-input" name="aisle" type="number" min="1" max="6" inputmode="numeric" placeholder="1" />
               </label>
+
               <label>
                 <span>Lado</span>
                 <input id="side-input" name="side" maxlength="1" autocomplete="off" placeholder="D o I" />
                 <small>D = Derecho · I = Izquierdo</small>
               </label>
+
               <label>
                 <span>Rack</span>
                 <input id="rack-input" name="rack" type="number" min="1" max="11" inputmode="numeric" placeholder="1" />
               </label>
+
               <label>
                 <span>Nivel</span>
                 <input id="level-input" name="level" type="number" min="1" max="6" inputmode="numeric" placeholder="1" />
               </label>
+
               <label>
                 <span>Tu nombre (opcional)</span>
                 <input id="updated-by-input" name="updatedBy" autocomplete="name" placeholder="Para saber quién hizo el cambio" />
               </label>
+
               <button id="save-location-button" class="primary-button wide" type="submit">Guardar ubicación</button>
               <button id="delete-location-button" class="danger-button wide hidden" type="button">Quitar ubicación actual</button>
             </form>
+
             <p class="keyboard-tip">Usa <kbd>Enter</kbd> para avanzar entre Pasillo, Lado, Rack y Nivel.</p>
           </div>
         </section>
@@ -186,6 +197,7 @@
                 <span>Stock</span>
                 <strong id="special-stock">—</strong>
               </div>
+
               <div>
                 <p class="eyebrow">PRODUCTO SELECCIONADO</p>
                 <h3 id="special-name"></h3>
@@ -241,42 +253,46 @@
         </section>
       </div>
     </section>
-  </main>
 
-    <section id="history-view" class="view hidden-admin-view">
-      <div class="section-card history-card">
+    <section id="history-view" class="view">
+      <div class="history-card">
         <div class="history-header">
           <div>
             <p class="eyebrow">ACCESO PRIVADO</p>
             <h2>Historial de cambios</h2>
-            <p class="muted">Este apartado queda oculto. Se abre escribiendo <strong>admin</strong> en el buscador principal.</p>
+            <p class="muted">Este apartado no aparece en el menú. Se abre escribiendo <strong>admin</strong> en el buscador principal.</p>
           </div>
-          <button id="history-back-button" type="button" class="ghost-button">Volver al buscador</button>
+          <button id="history-back-button" class="ghost-button" type="button">Volver</button>
         </div>
 
-        <form id="history-pin-form" class="history-pin-form">
-          <label for="history-pin-input">PIN administrador</label>
-          <div class="search-row">
-            <input id="history-pin-input" type="password" inputmode="numeric" autocomplete="off" placeholder="Ingresa tu PIN" />
-            <button type="submit" class="primary-button">Ver historial</button>
-          </div>
-        </form>
-
-        <div id="history-message" class="message hidden" role="status"></div>
+        <div id="history-login">
+          <form id="history-pin-form" class="history-pin-form">
+            <label for="history-pin-input">PIN administrador</label>
+            <div class="search-row compact">
+              <input id="history-pin-input" type="password" autocomplete="off" placeholder="Ingresa tu PIN" />
+              <button class="primary-button" type="submit">Entrar</button>
+            </div>
+          </form>
+        </div>
 
         <div id="history-content" class="hidden">
-          <div class="filters-card history-filter-card">
-            <input id="history-search" placeholder="Filtrar por SKU, nombre, persona o ubicación" autocomplete="off" />
-            <button id="history-refresh-button" type="button" class="ghost-button">Actualizar</button>
+          <div class="history-filter-card">
+            <input id="history-search" placeholder="Buscar SKU, nombre o trabajador" autocomplete="off" />
+            <select id="history-action-filter">
+              <option value="">Todos los cambios</option>
+              <option value="save-normal">Ubicación bodega</option>
+              <option value="save-special">Ubicación especial</option>
+              <option value="delete-location">Ubicación eliminada</option>
+            </select>
+            <button id="refresh-history-button" class="ghost-button" type="button">Actualizar</button>
           </div>
-          <div class="section-heading">
-            <h3>Registro</h3>
-            <span id="history-count" class="count-badge">0</span>
-          </div>
+
+          <div id="history-message" class="message hidden" role="status"></div>
           <div id="history-list" class="history-list"></div>
         </div>
       </div>
     </section>
+  </main>
 
   <footer>
     <span id="connection-indicator" class="connection-indicator">Comprobando conexión…</span>
