@@ -46,7 +46,6 @@ const PROJECT_DATA_DIR = path.join(__dirname, 'data');
 const DATA_DIR = path.resolve(process.env.DATA_DIR || PROJECT_DATA_DIR);
 
 const LOCATIONS_FILE = path.join(DATA_DIR, 'locations.json');
-const SPECIAL_LOCATIONS_FILE = path.join(DATA_DIR, 'special-locations.json');
 const PRODUCT_CACHE_FILE = path.join(DATA_DIR, 'products-cache.json');
 const OAUTH_STATE_FILE = path.join(DATA_DIR, 'relbase-oauth-state.json');
 
@@ -55,6 +54,46 @@ const DEMO_PRODUCTS_FILE = path.join(PROJECT_DATA_DIR, 'demo-products.json');
 
 const CATALOG_MODE = String(process.env.CATALOG_MODE || 'demo').toLowerCase();
 const SYNC_INTERVAL_MINUTES = Math.max(1, Number(process.env.SYNC_INTERVAL_MINUTES || 10));
+const MAX_SECOND_FLOOR_POSITION = Math.max(1, Number(process.env.MAX_SECOND_FLOOR_POSITION || 20));
+
+const SPECIAL_AREAS = {
+  PIEZA_1: {
+    key: 'PIEZA_1',
+    label: 'Pieza 1',
+    spots: {
+      ESTANTE_1: 'Estante 1',
+      ESTANTE_2: 'Estante 2',
+      ESTANTE_3: 'Estante 3',
+    },
+  },
+  PIEZA_2: {
+    key: 'PIEZA_2',
+    label: 'Pieza 2',
+    spots: {
+      ESTANTE_1: 'Estante 1',
+      ESTANTE_2: 'Estante 2',
+      ESTANTE_3: 'Estante 3',
+    },
+  },
+  PIEZA_3: {
+    key: 'PIEZA_3',
+    label: 'Pieza 3',
+    spots: {
+      ESTANTE_1: 'Estante 1',
+      ESTANTE_2: 'Estante 2',
+      ESTANTE_3: 'Estante 3',
+    },
+  },
+  SEGUNDO_PISO: {
+    key: 'SEGUNDO_PISO',
+    label: 'Segundo piso',
+    spots: {
+      PIEZA: 'Pieza',
+      ESTANTE_1: 'Estante 1',
+      PISO: 'Piso',
+    },
+  },
+};
 
 function normalizeSku(v) {
   return String(v || '').trim().toUpperCase();
@@ -69,6 +108,7 @@ function brandFromCode(code) {
 
   return 'Crusec';
 }
+
 function ensureDataDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -108,57 +148,6 @@ function writeLocations(db) {
   const tmp = `${LOCATIONS_FILE}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
   fs.renameSync(tmp, LOCATIONS_FILE);
-}
-
-function ensureSpecialLocationsFile() {
-  ensureDataDir();
-  if (!fs.existsSync(SPECIAL_LOCATIONS_FILE)) {
-    fs.writeFileSync(SPECIAL_LOCATIONS_FILE, JSON.stringify({ locations: {} }, null, 2));
-  }
-}
-
-function readSpecialLocations() {
-  ensureSpecialLocationsFile();
-  try {
-    const parsed = JSON.parse(fs.readFileSync(SPECIAL_LOCATIONS_FILE, 'utf8'));
-    return {
-      locations: parsed.locations && typeof parsed.locations === 'object' ? parsed.locations : {},
-    };
-  } catch (error) {
-    console.error('Error leyendo ubicaciones especiales:', error);
-    return { locations: {} };
-  }
-}
-
-function writeSpecialLocations(db) {
-  ensureSpecialLocationsFile();
-  const tmp = `${SPECIAL_LOCATIONS_FILE}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
-  fs.renameSync(tmp, SPECIAL_LOCATIONS_FILE);
-}
-
-const SPECIAL_AREAS = {
-  pieza1: { label: 'Pieza 1', spots: { estante1: 'Estante 1', estante2: 'Estante 2', estante3: 'Estante 3' } },
-  pieza2: { label: 'Pieza 2', spots: { estante1: 'Estante 1', estante2: 'Estante 2', estante3: 'Estante 3' } },
-  pieza3: { label: 'Pieza 3', spots: { estante1: 'Estante 1', estante2: 'Estante 2', estante3: 'Estante 3' } },
-  segundoPiso: { label: 'Segundo piso', spots: { pieza: 'Pieza', estante1: 'Estante 1' } },
-};
-
-function validateSpecialLocation(input) {
-  const area = String(input.area || '').trim();
-  const spot = String(input.spot || '').trim();
-  const areaConfig = SPECIAL_AREAS[area];
-
-  if (!areaConfig) return 'Selecciona una ubicación especial válida.';
-  if (!areaConfig.spots[spot]) return 'Selecciona una zona válida dentro de la ubicación especial.';
-
-  return {
-    area,
-    areaLabel: areaConfig.label,
-    spot,
-    spotLabel: areaConfig.spots[spot],
-    fullLabel: `${areaConfig.label} — ${areaConfig.spots[spot]}`,
-  };
 }
 
 function readDemoProducts() {
@@ -227,29 +216,86 @@ async function getCatalog(options = {}) {
   if (CATALOG_MODE === 'relbase') {
     const cache = readProductCache();
 
-    if (cache.products.length) {
-      return cache.products;
-    }
-
+    if (cache.products.length) return cache.products;
     if (allowLiveFetch) {
       const synced = await syncRelbaseProducts();
       return synced.products;
     }
-
     return [];
   }
 
   return readDemoProducts();
 }
 
+function normalizeNormalLocation(location) {
+  if (!location) return null;
+
+  const aisle = Number(location.aisle);
+  const rack = Number(location.rack);
+  const level = Number(location.level);
+  const side = String(location.side || '').trim().toUpperCase();
+  const sideLabel = side === 'D' ? 'Derecho' : side === 'I' ? 'Izquierdo' : (location.sideLabel || '');
+
+  if (!Number.isInteger(aisle) || !Number.isInteger(rack) || !Number.isInteger(level) || !['D', 'I'].includes(side)) {
+    return null;
+  }
+
+  return {
+    type: 'normal',
+    aisle,
+    side,
+    sideLabel,
+    rack,
+    level,
+    fullLabel: `Pasillo ${aisle} — lado ${sideLabel.toLowerCase()} — rack ${rack} — nivel ${level}`,
+  };
+}
+
+function normalizeSpecialLocation(location) {
+  if (!location) return null;
+
+  const areaKey = String(location.areaKey || location.area || '').trim().toUpperCase();
+  const area = SPECIAL_AREAS[areaKey];
+  if (!area) return null;
+
+  const spotKey = String(location.spotKey || location.spot || '').trim().toUpperCase();
+  const spotLabel = area.spots[spotKey];
+  if (!spotLabel) return null;
+
+  let position = null;
+  if (spotKey === 'PISO') {
+    position = Number(location.position);
+    if (!Number.isInteger(position) || position < 1 || position > MAX_SECOND_FLOOR_POSITION) return null;
+  }
+
+  return {
+    type: 'special',
+    areaKey,
+    areaLabel: area.label,
+    spotKey,
+    spotLabel,
+    position,
+    fullLabel: position
+      ? `${area.label} — ${spotLabel} — Posición ${position}`
+      : `${area.label} — ${spotLabel}`,
+  };
+}
+
+function normalizeSavedLocation(location) {
+  if (!location || typeof location !== 'object') return null;
+  if (location.type === 'special' || location.areaKey || location.area) return normalizeSpecialLocation(location);
+  return normalizeNormalLocation(location);
+}
+
 function mergeLocation(product, locationsDb) {
   const saved = locationsDb.locations[normalizeSku(product.sku)] || {};
+  const normalizedLocation = normalizeSavedLocation(saved.location);
 
   return {
     ...product,
     sku: normalizeSku(product.sku),
     brand: product.brand || brandFromCode(product.sku),
-    location: saved.location || null,
+    location: normalizedLocation,
     locationUpdatedAt: saved.locationUpdatedAt || null,
     locationUpdatedBy: saved.locationUpdatedBy || null,
   };
@@ -271,7 +317,7 @@ function publicProduct(product) {
   };
 }
 
-function validateLocation(input) {
+function validateNormalLocation(input) {
   const aisle = Number(input.aisle);
   const side = String(input.side || '').trim().toUpperCase();
   const rack = Number(input.rack);
@@ -284,15 +330,12 @@ function validateLocation(input) {
   if (!Number.isInteger(aisle) || aisle < 1 || aisle > maxAisle) {
     return `El pasillo debe estar entre 1 y ${maxAisle}.`;
   }
-
   if (!['D', 'I'].includes(side)) {
     return 'El lado debe ser D (derecho) o I (izquierdo).';
   }
-
   if (!Number.isInteger(rack) || rack < 1 || rack > maxRack) {
     return `El rack debe estar entre 1 y ${maxRack}.`;
   }
-
   if (!Number.isInteger(level) || level < 1 || level > maxLevel) {
     return `El nivel debe estar entre 1 y ${maxLevel}.`;
   }
@@ -300,12 +343,43 @@ function validateLocation(input) {
   const sideLabel = side === 'D' ? 'Derecho' : 'Izquierdo';
 
   return {
+    type: 'normal',
     aisle,
     side,
     sideLabel,
     rack,
     level,
     fullLabel: `Pasillo ${aisle} — lado ${sideLabel.toLowerCase()} — rack ${rack} — nivel ${level}`,
+  };
+}
+
+function validateSpecialLocation(input) {
+  const areaKey = String(input.areaKey || input.area || '').trim().toUpperCase();
+  const area = SPECIAL_AREAS[areaKey];
+  if (!area) return 'Debes elegir una zona especial válida.';
+
+  const spotKey = String(input.spotKey || input.spot || '').trim().toUpperCase();
+  const spotLabel = area.spots[spotKey];
+  if (!spotLabel) return 'Debes elegir una ubicación interna válida.';
+
+  let position = null;
+  if (spotKey === 'PISO') {
+    position = Number(input.position);
+    if (!Number.isInteger(position) || position < 1 || position > MAX_SECOND_FLOOR_POSITION) {
+      return `La posición del piso debe estar entre 1 y ${MAX_SECOND_FLOOR_POSITION}.`;
+    }
+  }
+
+  return {
+    type: 'special',
+    areaKey,
+    areaLabel: area.label,
+    spotKey,
+    spotLabel,
+    position,
+    fullLabel: position
+      ? `${area.label} — ${spotLabel} — Posición ${position}`
+      : `${area.label} — ${spotLabel}`,
   };
 }
 
@@ -322,41 +396,11 @@ function htmlPage(title, message, extra = '') {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${title}</title>
   <style>
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f4f6f8;
-      color: #111827;
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-    }
-    main {
-      width: min(680px, calc(100% - 32px));
-      background: white;
-      border: 1px solid #dbe2ea;
-      border-radius: 20px;
-      padding: 32px;
-      box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
-    }
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f6f8; color: #111827; margin: 0; min-height: 100vh; display: grid; place-items: center; }
+    main { width: min(680px, calc(100% - 32px)); background: white; border: 1px solid #dbe2ea; border-radius: 20px; padding: 32px; box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08); }
     h1 { margin-top: 0; }
-    a {
-      display: inline-block;
-      margin-top: 16px;
-      background: #1d4ed8;
-      color: white;
-      padding: 12px 16px;
-      border-radius: 12px;
-      text-decoration: none;
-      font-weight: 800;
-    }
-    pre {
-      background: #0f172a;
-      color: #e5e7eb;
-      padding: 14px;
-      border-radius: 12px;
-      overflow: auto;
-    }
+    a { display: inline-block; margin-top: 16px; background: #1d4ed8; color: white; padding: 12px 16px; border-radius: 12px; text-decoration: none; font-weight: 800; }
+    pre { background: #0f172a; color: #e5e7eb; padding: 14px; border-radius: 12px; overflow: auto; }
   </style>
 </head>
 <body>
@@ -372,7 +416,6 @@ function htmlPage(title, message, extra = '') {
 
 function writeOAuthState(state) {
   ensureDataDir();
-
   fs.writeFileSync(OAUTH_STATE_FILE, JSON.stringify({
     state,
     createdAt: new Date().toISOString(),
@@ -401,9 +444,7 @@ async function handleAuth(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/auth/login') {
     const state = crypto.randomBytes(24).toString('hex');
     writeOAuthState(state);
-
-    const loginUrl = relbase.getAuthUrl(state);
-    return sendRedirect(res, loginUrl);
+    return sendRedirect(res, relbase.getAuthUrl(state));
   }
 
   if (req.method === 'GET' && url.pathname === '/auth/callback') {
@@ -411,12 +452,7 @@ async function handleAuth(req, res, url) {
     const errorDescription = url.searchParams.get('error_description');
 
     if (error) {
-      return sendText(
-        res,
-        400,
-        htmlPage('Relbase no autorizó la conexión', `${errorDescription || error}`),
-        'text/html; charset=utf-8'
-      );
+      return sendText(res, 400, htmlPage('Relbase no autorizó la conexión', `${errorDescription || error}`), 'text/html; charset=utf-8');
     }
 
     const code = url.searchParams.get('code');
@@ -424,46 +460,20 @@ async function handleAuth(req, res, url) {
     const savedState = readOAuthState();
 
     if (!code) {
-      return sendText(
-        res,
-        400,
-        htmlPage('Falta el código de autorización', 'Relbase no devolvió el código necesario para conectar.'),
-        'text/html; charset=utf-8'
-      );
+      return sendText(res, 400, htmlPage('Falta el código de autorización', 'Relbase no devolvió el código necesario para conectar.'), 'text/html; charset=utf-8');
     }
 
     if (!savedState || savedState.state !== state || new Date(savedState.expiresAt).getTime() < Date.now()) {
-      return sendText(
-        res,
-        400,
-        htmlPage('Autorización inválida o expirada', 'Vuelve a iniciar sesión desde /auth/login.'),
-        'text/html; charset=utf-8'
-      );
+      return sendText(res, 400, htmlPage('Autorización inválida o expirada', 'Vuelve a iniciar sesión desde /auth/login.'), 'text/html; charset=utf-8');
     }
 
     try {
       const token = await relbase.exchangeCodeForToken(code);
       clearOAuthState();
-
-      return sendText(
-        res,
-        200,
-        htmlPage(
-          'Relbase conectado correctamente',
-          'La autorización fue guardada. Ahora la app puede leer productos desde Relbase.',
-          `<pre>Token válido hasta: ${token.expires_at || 'sin fecha informada'}</pre>`
-        ),
-        'text/html; charset=utf-8'
-      );
+      return sendText(res, 200, htmlPage('Relbase conectado correctamente', 'La autorización fue guardada. Ahora la app puede leer productos desde Relbase.', `<pre>Token válido hasta: ${token.expires_at || 'sin fecha informada'}</pre>`), 'text/html; charset=utf-8');
     } catch (authError) {
       console.error(authError);
-
-      return sendText(
-        res,
-        500,
-        htmlPage('No se pudo conectar Relbase', authError.message || 'Error desconocido.'),
-        'text/html; charset=utf-8'
-      );
+      return sendText(res, 500, htmlPage('No se pudo conectar Relbase', authError.message || 'Error desconocido.'), 'text/html; charset=utf-8');
     }
   }
 
@@ -472,13 +482,11 @@ async function handleAuth(req, res, url) {
 
 function sendJson(res, code, payload) {
   const body = JSON.stringify(payload);
-
   res.writeHead(code, {
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': Buffer.byteLength(body),
     'Cache-Control': 'no-store',
   });
-
   res.end(body);
 }
 
@@ -487,15 +495,12 @@ function sendText(res, code, text, type = 'text/plain; charset=utf-8') {
     'Content-Type': type,
     'Content-Length': Buffer.byteLength(text),
   });
-
   res.end(text);
 }
 
 async function readBody(req) {
   const chunks = [];
-
   for await (const chunk of req) chunks.push(chunk);
-
   if (!chunks.length) return {};
 
   try {
@@ -506,28 +511,20 @@ async function readBody(req) {
 }
 
 async function productSnapshot() {
-  const [catalog, locations] = await Promise.all([
-    getCatalog(),
-    Promise.resolve(readLocations()),
-  ]);
-
+  const [catalog, locations] = await Promise.all([getCatalog(), Promise.resolve(readLocations())]);
   return catalog.map((p) => mergeLocation(p, locations));
 }
 
 function getSyncStatusText(cache, relbaseStatus) {
-  if (CATALOG_MODE !== 'relbase') {
-    return 'Modo demo: Relbase pendiente de conectar';
-  }
-
-  if (!relbaseStatus?.authorized) {
-    return 'Relbase pendiente de autorización';
-  }
-
-  if (!cache.lastSyncAt || !cache.products.length) {
-    return 'Relbase conectado · presiona Sincronizar para cargar productos';
-  }
-
+  if (CATALOG_MODE !== 'relbase') return 'Modo demo: Relbase pendiente de conectar';
+  if (!relbaseStatus?.authorized) return 'Relbase pendiente de autorización';
+  if (!cache.lastSyncAt || !cache.products.length) return 'Relbase conectado · presiona Sincronizar para cargar productos';
   return `Relbase conectado · ${cache.products.length} productos guardados`;
+}
+
+function locationKind(location) {
+  if (!location) return 'none';
+  return location.type === 'special' ? 'special' : 'normal';
 }
 
 async function handleApi(req, res, url) {
@@ -543,15 +540,10 @@ async function handleApi(req, res, url) {
         cache = readProductCache();
         productCount = cache.products.length;
       } else {
-        const demo = readDemoProducts();
-        productCount = demo.length;
+        productCount = readDemoProducts().length;
       }
     } catch (error) {
-      relbaseStatus = {
-        configured: true,
-        authorized: false,
-        error: error.message,
-      };
+      relbaseStatus = { configured: true, authorized: false, error: error.message };
     }
 
     return sendJson(res, 200, {
@@ -565,51 +557,40 @@ async function handleApi(req, res, url) {
       syncIntervalMinutes: SYNC_INTERVAL_MINUTES,
       storage: DATA_DIR,
       cacheFile: CATALOG_MODE === 'relbase' ? PRODUCT_CACHE_FILE : null,
-      specialLocationsFile: SPECIAL_LOCATIONS_FILE,
+      maxSecondFloorPosition: MAX_SECOND_FLOOR_POSITION,
+      specialAreas: Object.values(SPECIAL_AREAS).map((area) => ({
+        key: area.key,
+        label: area.label,
+        spots: Object.entries(area.spots).map(([key, label]) => ({ key, label })),
+      })),
     });
   }
 
   if (req.method === 'GET' && url.pathname === '/api/products/search') {
     const sku = normalizeSku(url.searchParams.get('sku'));
-
-    if (!sku) {
-      return sendJson(res, 400, { error: 'Debes ingresar un SKU o código de barras.' });
-    }
+    if (!sku) return sendJson(res, 400, { error: 'Debes ingresar un SKU o código de barras.' });
 
     const products = await productSnapshot();
-
     if (CATALOG_MODE === 'relbase' && !products.length) {
-      return sendJson(res, 409, {
-        error: 'Aún no hay productos sincronizados. Presiona "Sincronizar con Relbase" primero.',
-      });
+      return sendJson(res, 409, { error: 'Aún no hay productos sincronizados. Presiona "Sincronizar con Relbase" primero.' });
     }
 
-    const product = products.find((p) =>
-      normalizeSku(p.sku) === sku ||
-      normalizeSku(p.barcode) === sku
-    );
+    const product = products.find((p) => normalizeSku(p.sku) === sku || normalizeSku(p.barcode) === sku);
+    if (!product) return sendJson(res, 404, { error: 'Código de producto no registrado.' });
 
-    if (!product) {
-      return sendJson(res, 404, { error: 'Código de producto no registrado.' });
-    }
-
-    const cache = CATALOG_MODE === 'relbase' ? readProductCache() : { lastSyncAt: null };
-
-    return sendJson(res, 200, {
-      product: publicProduct(product),
-      lastSyncAt: cache.lastSyncAt,
-    });
+    return sendJson(res, 200, { product: publicProduct(product), lastSyncAt: CATALOG_MODE === 'relbase' ? readProductCache().lastSyncAt : null });
   }
 
   if (req.method === 'GET' && url.pathname === '/api/products') {
     const filter = String(url.searchParams.get('filter') || 'all');
     const q = String(url.searchParams.get('q') || '').trim().toUpperCase();
-
     let products = await productSnapshot();
-    const cache = CATALOG_MODE === 'relbase' ? readProductCache() : { lastSyncAt: null, products: [] };
+    const cache = CATALOG_MODE === 'relbase' ? readProductCache() : { lastSyncAt: null };
 
     if (filter === 'unassigned') products = products.filter((p) => !p.location);
     if (filter === 'assigned') products = products.filter((p) => Boolean(p.location));
+    if (filter === 'normal') products = products.filter((p) => locationKind(p.location) === 'normal');
+    if (filter === 'special') products = products.filter((p) => locationKind(p.location) === 'special');
     if (filter === 'with-stock') products = products.filter((p) => Number(p.stock) > 0);
     if (filter === 'without-stock') products = products.filter((p) => Number(p.stock) === 0);
 
@@ -623,20 +604,13 @@ async function handleApi(req, res, url) {
     }
 
     products.sort((a, b) => {
-      if (Boolean(a.location) !== Boolean(b.location)) {
-        return a.location ? 1 : -1;
-      }
-
+      if (Boolean(a.location) !== Boolean(b.location)) return a.location ? 1 : -1;
       return normalizeSku(a.sku).localeCompare(normalizeSku(b.sku));
     });
 
     let relbaseStatus = null;
-
     if (CATALOG_MODE === 'relbase') {
-      try {
-        const relbase = require('./src/relbase');
-        relbaseStatus = relbase.status();
-      } catch {}
+      try { relbaseStatus = require('./src/relbase').status(); } catch {}
     }
 
     return sendJson(res, 200, {
@@ -646,154 +620,92 @@ async function handleApi(req, res, url) {
     });
   }
 
-  const match = url.pathname.match(/^\/api\/products\/([^/]+)\/location$/);
+  if (req.method === 'GET' && url.pathname === '/api/special-locations') {
+    const areaKey = String(url.searchParams.get('areaKey') || '').trim().toUpperCase();
+    const spotKey = String(url.searchParams.get('spotKey') || '').trim().toUpperCase();
 
-  if (match && req.method === 'PUT') {
-    const sku = normalizeSku(decodeURIComponent(match[1]));
+    let products = await productSnapshot();
+    products = products.filter((p) => p.location?.type === 'special');
+    if (areaKey) products = products.filter((p) => p.location.areaKey === areaKey);
+    if (spotKey) products = products.filter((p) => p.location.spotKey === spotKey);
+
+    products.sort((a, b) => {
+      const apos = a.location?.position ?? 99999;
+      const bpos = b.location?.position ?? 99999;
+      if (apos !== bpos) return apos - bpos;
+      return normalizeSku(a.sku).localeCompare(normalizeSku(b.sku));
+    });
+
+    return sendJson(res, 200, { products: products.map(publicProduct) });
+  }
+
+  const locationMatch = url.pathname.match(/^\/api\/products\/([^/]+)\/location$/);
+  const specialMatch = url.pathname.match(/^\/api\/products\/([^/]+)\/special-location$/);
+
+  if (locationMatch && req.method === 'PUT') {
+    const sku = normalizeSku(decodeURIComponent(locationMatch[1]));
     const products = await getCatalog();
-
     const exists = products.some((p) => normalizeSku(p.sku) === sku);
-
-    if (!exists) {
-      return sendJson(res, 404, { error: 'Producto no encontrado.' });
-    }
+    if (!exists) return sendJson(res, 404, { error: 'Producto no encontrado.' });
 
     const body = await readBody(req);
-    const location = validateLocation(body);
-
-    if (typeof location === 'string') {
-      return sendJson(res, 400, { error: location });
-    }
+    const location = validateNormalLocation(body);
+    if (typeof location === 'string') return sendJson(res, 400, { error: location });
 
     const db = readLocations();
-
     db.locations[sku] = {
       location,
       locationUpdatedAt: new Date().toISOString(),
       locationUpdatedBy: String(body.updatedBy || 'Sin identificar').trim() || 'Sin identificar',
     };
-
     writeLocations(db);
 
-    const product = mergeLocation(
-      products.find((p) => normalizeSku(p.sku) === sku),
-      db
-    );
-
-    return sendJson(res, 200, {
-      product: publicProduct(product),
-      message: 'Ubicación guardada correctamente.',
-    });
+    const product = mergeLocation(products.find((p) => normalizeSku(p.sku) === sku), db);
+    return sendJson(res, 200, { product: publicProduct(product), message: 'Ubicación de bodega guardada correctamente.' });
   }
 
-  if (match && req.method === 'DELETE') {
-    const sku = normalizeSku(decodeURIComponent(match[1]));
+  if (specialMatch && req.method === 'PUT') {
+    const sku = normalizeSku(decodeURIComponent(specialMatch[1]));
+    const products = await getCatalog();
+    const exists = products.some((p) => normalizeSku(p.sku) === sku);
+    if (!exists) return sendJson(res, 404, { error: 'Producto no encontrado.' });
+
+    const body = await readBody(req);
+    const location = validateSpecialLocation(body);
+    if (typeof location === 'string') return sendJson(res, 400, { error: location });
+
+    const db = readLocations();
+    db.locations[sku] = {
+      location,
+      locationUpdatedAt: new Date().toISOString(),
+      locationUpdatedBy: String(body.updatedBy || 'Sin identificar').trim() || 'Sin identificar',
+    };
+    writeLocations(db);
+
+    const product = mergeLocation(products.find((p) => normalizeSku(p.sku) === sku), db);
+    return sendJson(res, 200, { product: publicProduct(product), message: 'Ubicación especial guardada correctamente.' });
+  }
+
+  if ((locationMatch || specialMatch) && req.method === 'DELETE') {
+    const sku = normalizeSku(decodeURIComponent((locationMatch || specialMatch)[1]));
     const products = await getCatalog();
     const base = products.find((p) => normalizeSku(p.sku) === sku);
-
-    if (!base) {
-      return sendJson(res, 404, { error: 'Producto no encontrado.' });
-    }
+    if (!base) return sendJson(res, 404, { error: 'Producto no encontrado.' });
 
     const db = readLocations();
     delete db.locations[sku];
     writeLocations(db);
 
-    return sendJson(res, 200, {
-      product: publicProduct(mergeLocation(base, db)),
-      message: 'Ubicación eliminada.',
-    });
-  }
-
-  if (req.method === 'GET' && url.pathname === '/api/special-locations/options') {
-    return sendJson(res, 200, { areas: SPECIAL_AREAS });
-  }
-
-  if (req.method === 'GET' && url.pathname === '/api/special-locations') {
-    const area = String(url.searchParams.get('area') || '').trim();
-    const spot = String(url.searchParams.get('spot') || '').trim();
-    const q = String(url.searchParams.get('q') || '').trim().toUpperCase();
-    const db = readSpecialLocations();
-    const catalog = await getCatalog();
-    const bySku = new Map(catalog.map((p) => [normalizeSku(p.sku), p]));
-
-    let items = Object.entries(db.locations).map(([sku, saved]) => {
-      const base = bySku.get(normalizeSku(sku));
-      return {
-        sku: normalizeSku(sku),
-        name: base?.name || 'Producto no disponible en catálogo',
-        brand: base?.brand || brandFromCode(sku),
-        stock: base?.stock ?? null,
-        specialLocation: saved.specialLocation || null,
-        specialLocationUpdatedAt: saved.specialLocationUpdatedAt || null,
-        specialLocationUpdatedBy: saved.specialLocationUpdatedBy || null,
-      };
-    });
-
-    if (area) items = items.filter((item) => item.specialLocation?.area === area);
-    if (spot) items = items.filter((item) => item.specialLocation?.spot === spot);
-    if (q) {
-      items = items.filter((item) =>
-        item.sku.includes(q) ||
-        String(item.name || '').toUpperCase().includes(q) ||
-        String(item.brand || '').toUpperCase().includes(q)
-      );
-    }
-
-    items.sort((a, b) => a.sku.localeCompare(b.sku));
-    return sendJson(res, 200, { items });
-  }
-
-  const specialMatch = url.pathname.match(/^\/api\/products\/([^/]+)\/special-location$/);
-
-  if (specialMatch && req.method === 'PUT') {
-    const sku = normalizeSku(decodeURIComponent(specialMatch[1]));
-    const products = await getCatalog();
-    const base = products.find((p) => normalizeSku(p.sku) === sku);
-    if (!base) return sendJson(res, 404, { error: 'Producto no encontrado.' });
-
-    const body = await readBody(req);
-    const specialLocation = validateSpecialLocation(body);
-    if (typeof specialLocation === 'string') return sendJson(res, 400, { error: specialLocation });
-
-    const db = readSpecialLocations();
-    db.locations[sku] = {
-      specialLocation,
-      specialLocationUpdatedAt: new Date().toISOString(),
-      specialLocationUpdatedBy: String(body.updatedBy || 'Sin identificar').trim() || 'Sin identificar',
-    };
-    writeSpecialLocations(db);
-
-    return sendJson(res, 200, {
-      item: {
-        sku,
-        name: base.name || 'Producto sin nombre',
-        brand: base.brand || brandFromCode(sku),
-        stock: base.stock ?? null,
-        ...db.locations[sku],
-      },
-      message: 'Ubicación especial guardada correctamente.',
-    });
-  }
-
-  if (specialMatch && req.method === 'DELETE') {
-    const sku = normalizeSku(decodeURIComponent(specialMatch[1]));
-    const db = readSpecialLocations();
-    delete db.locations[sku];
-    writeSpecialLocations(db);
-    return sendJson(res, 200, { message: 'Ubicación especial eliminada.' });
+    return sendJson(res, 200, { product: publicProduct(mergeLocation(base, db)), message: 'Ubicación eliminada.' });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/sync') {
     if (CATALOG_MODE !== 'relbase') {
-      return sendJson(res, 409, {
-        error: 'Relbase todavía no está conectado. La app está funcionando con productos de demostración.',
-      });
+      return sendJson(res, 409, { error: 'Relbase todavía no está conectado. La app está funcionando con productos de demostración.' });
     }
 
     try {
       const synced = await syncRelbaseProducts();
-
       return sendJson(res, 200, {
         message: `Sincronización completada. ${synced.products.length} productos guardados.`,
         productCount: synced.products.length,
@@ -801,9 +713,7 @@ async function handleApi(req, res, url) {
       });
     } catch (error) {
       console.error('Error sincronizando Relbase:', error);
-
       const cache = readProductCache();
-
       return sendJson(res, 502, {
         error: `${error.message || 'No se pudo sincronizar Relbase.'}${cache.products.length ? ` Se mantiene el caché anterior con ${cache.products.length} productos.` : ''}`,
         productCount: cache.products.length,
@@ -818,17 +728,10 @@ async function handleApi(req, res, url) {
 function serveStatic(res, pathname) {
   const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
   const file = path.normalize(path.join(PUBLIC_DIR, rel));
-
-  if (!file.startsWith(PUBLIC_DIR)) {
-    return sendText(res, 403, 'Acceso denegado');
-  }
-
-  if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) {
-    return sendText(res, 404, 'Archivo no encontrado');
-  }
+  if (!file.startsWith(PUBLIC_DIR)) return sendText(res, 403, 'Acceso denegado');
+  if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) return sendText(res, 404, 'Archivo no encontrado');
 
   const ext = path.extname(file).toLowerCase();
-
   const types = {
     '.html': 'text/html; charset=utf-8',
     '.css': 'text/css; charset=utf-8',
@@ -839,13 +742,11 @@ function serveStatic(res, pathname) {
   };
 
   const content = fs.readFileSync(file);
-
   res.writeHead(200, {
     'Content-Type': types[ext] || 'application/octet-stream',
     'Content-Length': content.length,
     'Cache-Control': ext === '.html' ? 'no-store' : 'public, max-age=300',
   });
-
   res.end(content);
 }
 
@@ -855,21 +756,12 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
-    if (url.pathname.startsWith('/auth/')) {
-      return await handleAuth(req, res, url);
-    }
-
-    if (url.pathname.startsWith('/api/')) {
-      return await handleApi(req, res, url);
-    }
-
+    if (url.pathname.startsWith('/auth/')) return await handleAuth(req, res, url);
+    if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
     return serveStatic(res, url.pathname);
   } catch (error) {
     console.error(error);
-
-    return sendJson(res, 500, {
-      error: error.message || 'Error interno del servidor.',
-    });
+    return sendJson(res, 500, { error: error.message || 'Error interno del servidor.' });
   }
 });
 

@@ -2,20 +2,21 @@
  * Crusec Bodega
  * Sistema desarrollado por David Navarro por iniciativa propia
  * para apoyo interno de bodega Crusec Life Store.
- *
- * Nota de autoría:
- * Este desarrollo, su estructura técnica y futuras mejoras quedan sujetos a acuerdo
- * con David Navarro en caso de continuidad, modificación mayor, traspaso o uso
- * fuera de la operación interna de bodega.
  */
 const state = {
   products: [],
   selectedProduct: null,
   searchedProduct: null,
-  status: null,
-  specialArea: 'pieza1',
-  specialSpot: 'estante1',
   specialProduct: null,
+  status: null,
+  specialConfig: {
+    areas: [],
+    maxSecondFloorPosition: 20,
+  },
+  specialSelection: {
+    areaKey: '',
+    spotKey: '',
+  },
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -23,9 +24,7 @@ const $$ = (selector) => [...document.querySelectorAll(selector)];
 
 function formatDate(value) {
   if (!value) return 'Sin sincronizar';
-
   const date = new Date(value);
-
   if (Number.isNaN(date.getTime())) return 'Sin información';
 
   return new Intl.DateTimeFormat('es-CL', {
@@ -44,18 +43,30 @@ function hideMessage(element) {
   element.className = 'message hidden';
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function brandFromCode(code) {
+  const sku = String(code || '').trim().toUpperCase();
+  const prefix = sku.charAt(0);
+  if (prefix === 'P') return 'Pitaya';
+  if (prefix === 'Y') return 'Yozen';
+  return 'Crusec';
+}
+
 async function api(path, options = {}) {
   const headers = { ...(options.headers || {}) };
-
   if (options.body && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';
   }
 
-  const response = await fetch(path, {
-    ...options,
-    headers,
-  });
-
+  const response = await fetch(path, { ...options, headers });
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
@@ -67,24 +78,18 @@ async function api(path, options = {}) {
   return payload;
 }
 
+function locationKind(location) {
+  if (!location) return 'none';
+  return location.type === 'special' ? 'special' : 'normal';
+}
+
 function showView(viewName) {
-  $$('.tab').forEach((button) => {
-    button.classList.toggle('active', button.dataset.view === viewName);
-  });
-
-  $$('.view').forEach((view) => {
-    view.classList.remove('active');
-  });
-
+  $$('.tab').forEach((button) => button.classList.toggle('active', button.dataset.view === viewName));
+  $$('.view').forEach((view) => view.classList.remove('active'));
   $(`#${viewName}-view`).classList.add('active');
 
-  if (viewName === 'search') {
-    setTimeout(() => $('#sku-search').focus(), 30);
-  }
-
-  if (viewName === 'special') {
-    setTimeout(() => $('#special-sku-search').focus(), 30);
-  }
+  if (viewName === 'search') setTimeout(() => $('#sku-search').focus(), 30);
+  if (viewName === 'special') setTimeout(() => $('#special-sku-search').focus(), 30);
 }
 
 async function setView(viewName) {
@@ -100,22 +105,53 @@ async function setView(viewName) {
 
   if (viewName === 'special') {
     try {
-      renderSpecialSpots();
-      await loadSpecialProducts();
+      await loadSpecialBrowser();
     } catch (error) {
       showMessage($('#special-message'), error.message, 'error');
     }
   }
 }
 
+function populateSpecialBrowserFilters() {
+  const areaSelect = $('#browser-area-select');
+  areaSelect.innerHTML = '<option value="">Todas las zonas</option>';
+  for (const area of state.specialConfig.areas || []) {
+    areaSelect.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(area.key)}">${escapeHtml(area.label)}</option>`);
+  }
+  populateSpotSelect();
+}
+
+function populateSpotSelect() {
+  const areaSelect = $('#browser-area-select');
+  const spotSelect = $('#browser-spot-select');
+  const area = (state.specialConfig.areas || []).find((item) => item.key === areaSelect.value);
+
+  spotSelect.innerHTML = '<option value="">Todos los lugares</option>';
+  const spots = area ? area.spots : (state.specialConfig.areas || []).flatMap((item) => item.spots);
+
+  const unique = [];
+  const seen = new Set();
+  for (const spot of spots) {
+    const key = `${spot.key}:${spot.label}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(spot);
+  }
+
+  for (const spot of unique) {
+    spotSelect.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(spot.key)}">${escapeHtml(spot.label)}</option>`);
+  }
+}
+
 async function loadStatus() {
   try {
     const status = await api('/api/status');
-
     state.status = status;
+    state.specialConfig.areas = status.specialAreas || [];
+    state.specialConfig.maxSecondFloorPosition = status.maxSecondFloorPosition || 20;
+    $('#special-position-input').max = state.specialConfig.maxSecondFloorPosition;
 
     const indicator = $('#connection-indicator');
-
     if (status.relbaseEnabled && status.relbaseAuthorized) {
       indicator.textContent = `Relbase conectado · ${status.productCount || 0} productos guardados`;
       indicator.className = 'connection-indicator connected';
@@ -126,28 +162,60 @@ async function loadStatus() {
       indicator.textContent = 'Modo demostración · Relbase aún no está conectado';
       indicator.className = 'connection-indicator demo';
     }
+
+    populateSpecialBrowserFilters();
   } catch (error) {
     const indicator = $('#connection-indicator');
-indicator.textContent = 'No conectado';
-indicator.className = 'connection-indicator error';
+    indicator.textContent = 'No conectado';
+    indicator.className = 'connection-indicator error';
   }
 }
 
 async function searchProduct(sku) {
-  const message = $('#search-message');
-
-  hideMessage(message);
+  hideMessage($('#search-message'));
   $('#search-result').classList.add('hidden');
 
   try {
     const { product } = await api(`/api/products/search?sku=${encodeURIComponent(sku)}`);
-
     state.searchedProduct = product;
     renderSearchResult(product);
   } catch (error) {
     state.searchedProduct = null;
-    showMessage(message, error.message, 'error');
+    showMessage($('#search-message'), error.message, 'error');
   }
+}
+
+function renderNormalLocationContent(location, missing = false) {
+  const aisle = missing ? '—' : escapeHtml(location.aisle);
+  const side = missing ? '—' : escapeHtml(location.sideLabel);
+  const rack = missing ? '—' : escapeHtml(location.rack);
+  const level = missing ? '—' : escapeHtml(location.level);
+  const summary = missing
+    ? 'Este producto todavía no tiene una ubicación. Puedes agregarla ahora.'
+    : escapeHtml(location.fullLabel);
+
+  return `
+    <div class="location-grid ${missing ? 'missing-grid' : ''}">
+      <div class="location-box"><span>Pasillo</span><strong>${aisle}</strong></div>
+      <div class="location-box"><span>Lado</span><strong>${side}</strong></div>
+      <div class="location-box"><span>Rack</span><strong>${rack}</strong></div>
+      <div class="location-box"><span>Nivel</span><strong>${level}</strong></div>
+    </div>
+    <p class="location-full ${missing ? 'missing-copy' : ''}">${summary}</p>
+  `;
+}
+
+function renderSpecialLocationContent(location) {
+  const hasPosition = Number.isInteger(location.position);
+
+  return `
+    <div class="location-grid special-grid">
+      <div class="location-box"><span>Zona</span><strong>${escapeHtml(location.areaLabel)}</strong></div>
+      <div class="location-box"><span>Lugar</span><strong>${escapeHtml(location.spotLabel)}</strong></div>
+      <div class="location-box"><span>Posición</span><strong>${hasPosition ? escapeHtml(location.position) : '—'}</strong></div>
+    </div>
+    <p class="location-full">${escapeHtml(location.fullLabel)}</p>
+  `;
 }
 
 function renderSearchResult(product) {
@@ -155,34 +223,27 @@ function renderSearchResult(product) {
   $('#result-sku').textContent = `SKU: ${product.sku}`;
   $('#result-brand').textContent = `Marca: ${product.brand || brandFromCode(product.sku)}`;
   $('#result-stock').textContent = product.stock === null || product.stock === undefined ? '—' : `${product.stock}`;
-
   $('#result-stock-time').textContent = product.stockUpdatedAt
     ? `Actualizado: ${formatDate(product.stockUpdatedAt)}`
     : 'Stock no informado por Relbase';
 
   const panel = $('#location-panel');
-  const editButton = $('#edit-result-button');
+  const content = $('#location-content');
+  const kind = locationKind(product.location);
 
-  if (product.location) {
-    panel.classList.remove('missing');
+  panel.classList.remove('missing', 'special-panel');
 
-    $('#result-aisle').textContent = product.location.aisle;
-    $('#result-side').textContent = product.location.sideLabel;
-    $('#result-rack').textContent = product.location.rack;
-    $('#result-level').textContent = product.location.level;
-    $('#result-location-full').textContent = product.location.fullLabel;
-
-    editButton.textContent = 'Editar ubicación';
+  if (kind === 'normal') {
+    content.innerHTML = renderNormalLocationContent(product.location, false);
+    $('#edit-result-button').textContent = 'Editar ubicación';
+  } else if (kind === 'special') {
+    panel.classList.add('special-panel');
+    content.innerHTML = renderSpecialLocationContent(product.location);
+    $('#edit-result-button').textContent = 'Editar ubicación especial';
   } else {
     panel.classList.add('missing');
-
-    $('#result-aisle').textContent = '—';
-    $('#result-side').textContent = '—';
-    $('#result-rack').textContent = '—';
-    $('#result-level').textContent = '—';
-    $('#result-location-full').textContent = 'Este producto todavía no tiene una ubicación. Puedes agregarla ahora.';
-
-    editButton.textContent = 'Asignar ubicación';
+    content.innerHTML = renderNormalLocationContent({}, true);
+    $('#edit-result-button').textContent = 'Asignar ubicación';
   }
 
   $('#search-result').classList.remove('hidden');
@@ -191,40 +252,41 @@ function renderSearchResult(product) {
 async function openSearchedProductEditor() {
   if (!state.searchedProduct) return;
 
+  if (locationKind(state.searchedProduct.location) === 'special') {
+    showView('special');
+    state.specialProduct = state.searchedProduct;
+    renderSpecialProduct(state.searchedProduct);
+    await loadSpecialBrowser();
+    return;
+  }
+
   $('#admin-filter').value = 'all';
   $('#admin-search').value = state.searchedProduct.sku;
-
   showView('admin');
-
   await loadProducts();
 
   const product = state.products.find((item) => item.sku === state.searchedProduct.sku) || state.searchedProduct;
-
   selectProduct(product);
 }
 
 async function loadProducts() {
   const filter = $('#admin-filter').value;
   const q = $('#admin-search').value.trim();
-
   const payload = await api(`/api/products?filter=${encodeURIComponent(filter)}&q=${encodeURIComponent(q)}`);
 
   state.products = payload.products;
 
   const syncStatus = $('#sync-status');
-
-syncStatus.className = 'sync-status connected';
-
-syncStatus.innerHTML = payload.lastSyncAt
-  ? `<span class="status-dot"></span><span><strong>Relbase conectado</strong><br>${state.products.length} productos en esta vista<br>Última actualización: ${formatDate(payload.lastSyncAt)}</span>`
-  : `<span class="status-dot"></span><span><strong>Relbase conectado</strong><br>${state.products.length} productos en esta vista<br>Sin sincronización registrada</span>`;
+  syncStatus.className = 'sync-status connected';
+  syncStatus.innerHTML = payload.lastSyncAt
+    ? `<span class="status-dot"></span><span><strong>Relbase conectado</strong><br>${state.products.length} productos en esta vista<br>Última actualización: ${formatDate(payload.lastSyncAt)}</span>`
+    : `<span class="status-dot"></span><span><strong>Relbase conectado</strong><br>${state.products.length} productos en esta vista<br>Sin sincronización registrada</span>`;
 
   renderProductList();
 }
 
 function renderProductList() {
   const list = $('#product-list');
-
   list.innerHTML = '';
   $('#product-count').textContent = state.products.length;
 
@@ -235,54 +297,31 @@ function renderProductList() {
 
   for (const product of state.products) {
     const button = document.createElement('button');
-
     button.type = 'button';
     button.className = `product-item${state.selectedProduct?.sku === product.sku ? ' selected' : ''}`;
 
     const stockText = product.stock === null || product.stock === undefined ? 'Stock —' : `Stock ${product.stock}`;
     const locationText = product.location ? product.location.fullLabel : 'Sin ubicación';
-    const brand = product.brand || brandFromCode(product.sku);
 
     button.innerHTML = `
       <div class="product-item-top">
         <div>
           <strong class="product-name">${escapeHtml(product.name)}</strong>
           <small class="product-sku">SKU: ${escapeHtml(product.sku)}</small>
-          <small class="brand-small">Marca: ${escapeHtml(brand)}</small>
+          <small class="brand-small">Marca: ${escapeHtml(product.brand || brandFromCode(product.sku))}</small>
         </div>
         <span class="stock-chip">${escapeHtml(stockText)}</span>
       </div>
-      <span class="location-chip ${product.location ? '' : 'missing'}">${escapeHtml(locationText)}</span>
+      <span class="location-chip ${product.location ? '' : 'missing'} ${locationKind(product.location) === 'special' ? 'special' : ''}">${escapeHtml(locationText)}</span>
     `;
 
     button.addEventListener('click', () => selectProduct(product));
-
     list.appendChild(button);
   }
 }
 
-function brandFromCode(code) {
-  const sku = String(code || '').trim().toUpperCase();
-  const prefix = sku.charAt(0);
-
-  if (prefix === 'P') return 'Pitaya';
-  if (prefix === 'Y') return 'Yozen';
-
-  return 'Crusec';
-}
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
-
 function selectProduct(product) {
   state.selectedProduct = product;
-
   const assignmentCard = $('#assignment-card');
 
   assignmentCard.classList.remove('empty');
@@ -294,27 +333,40 @@ function selectProduct(product) {
   $('#assign-brand').textContent = `Marca: ${product.brand || brandFromCode(product.sku)}`;
   $('#assign-stock').textContent = product.stock === null || product.stock === undefined ? '—' : product.stock;
 
-  $('#aisle-input').value = product.location?.aisle || '';
-  $('#side-input').value = product.location?.side || '';
-  $('#rack-input').value = product.location?.rack || '';
-  $('#level-input').value = product.location?.level || '';
+  const kind = locationKind(product.location);
+  $('#assignment-current-location').classList.add('hidden');
 
-  $('#assignment-mode').textContent = product.location ? 'EDITAR UBICACIÓN' : 'ASIGNAR UBICACIÓN';
-  $('#save-location-button').textContent = product.location ? 'Actualizar ubicación' : 'Guardar ubicación';
+  if (kind === 'normal') {
+    $('#aisle-input').value = product.location.aisle || '';
+    $('#side-input').value = product.location.side || '';
+    $('#rack-input').value = product.location.rack || '';
+    $('#level-input').value = product.location.level || '';
+    $('#assignment-mode').textContent = 'EDITAR UBICACIÓN DE BODEGA';
+    $('#save-location-button').textContent = 'Actualizar ubicación';
+  } else {
+    $('#aisle-input').value = '';
+    $('#side-input').value = '';
+    $('#rack-input').value = '';
+    $('#level-input').value = '';
+    $('#assignment-mode').textContent = 'ASIGNAR UBICACIÓN DE BODEGA';
+    $('#save-location-button').textContent = 'Guardar ubicación';
+  }
+
+  if (kind === 'special') {
+    $('#assignment-current-location').textContent = `Ubicación actual: ${product.location.fullLabel}. Si guardas aquí, esa ubicación especial se reemplazará.`;
+    $('#assignment-current-location').classList.remove('hidden');
+  } else if (kind === 'normal') {
+    $('#assignment-current-location').textContent = `Ubicación actual: ${product.location.fullLabel}`;
+    $('#assignment-current-location').classList.remove('hidden');
+  }
+
   $('#delete-location-button').classList.toggle('hidden', !product.location);
-
   renderProductList();
 
   setTimeout(() => {
-    const isMobile = window.matchMedia('(max-width: 860px)').matches;
-
-    if (isMobile) {
-      assignmentCard.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      });
+    if (window.matchMedia('(max-width: 860px)').matches) {
+      assignmentCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-
     $('#aisle-input').focus();
     $('#aisle-input').select();
   }, 80);
@@ -322,11 +374,9 @@ function selectProduct(product) {
 
 function clearSelection() {
   state.selectedProduct = null;
-
   $('#assignment-content').classList.add('hidden');
   $('#assignment-empty').classList.remove('hidden');
   $('#assignment-card').classList.add('empty');
-
   renderProductList();
 }
 
@@ -334,11 +384,9 @@ async function saveLocation() {
   if (!state.selectedProduct) return;
 
   const message = $('#admin-message');
-
   hideMessage(message);
 
   const previousSku = state.selectedProduct.sku;
-
   const payload = {
     aisle: $('#aisle-input').value,
     side: $('#side-input').value,
@@ -361,14 +409,10 @@ async function saveLocation() {
     }
 
     await loadProducts();
-
     clearSelection();
 
     if (window.matchMedia('(max-width: 860px)').matches) {
-      $('#product-list').scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      });
+      $('#product-list').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   } catch (error) {
     showMessage(message, error.message, 'error');
@@ -376,19 +420,12 @@ async function saveLocation() {
 }
 
 function configureKeyboardFlow() {
-  const flow = [
-    $('#aisle-input'),
-    $('#side-input'),
-    $('#rack-input'),
-    $('#level-input'),
-  ];
+  const flow = [$('#aisle-input'), $('#side-input'), $('#rack-input'), $('#level-input')];
 
   flow.forEach((input, index) => {
     input.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter') return;
-
       event.preventDefault();
-
       if (!input.value.trim()) return;
 
       if (index < flow.length - 1) {
@@ -408,23 +445,15 @@ function configureKeyboardFlow() {
 async function syncRelbase() {
   const button = $('#sync-button');
   const message = $('#admin-message');
-
   hideMessage(message);
 
   button.disabled = true;
   button.textContent = 'Sincronizando…';
 
   try {
-    const result = await api('/api/sync', {
-      method: 'POST',
-    });
-
+    const result = await api('/api/sync', { method: 'POST' });
     showMessage(message, result.message, 'success');
-
-    await Promise.all([
-      loadProducts(),
-      loadStatus(),
-    ]);
+    await Promise.all([loadProducts(), loadStatus(), loadSpecialBrowser()]);
   } catch (error) {
     showMessage(message, error.message, error.status === 409 ? 'warning' : 'error');
   } finally {
@@ -435,19 +464,13 @@ async function syncRelbase() {
 
 async function deleteLocation() {
   if (!state.selectedProduct) return;
-
   const sku = state.selectedProduct.sku;
   const accepted = confirm(`¿Quitar la ubicación actual de ${sku}? Después podrá asignarse nuevamente.`);
-
   if (!accepted) return;
 
   const message = $('#admin-message');
-
   try {
-    const result = await api(`/api/products/${encodeURIComponent(sku)}/location`, {
-      method: 'DELETE',
-    });
-
+    const result = await api(`/api/products/${encodeURIComponent(sku)}/location`, { method: 'DELETE' });
     showMessage(message, result.message, 'success');
 
     if (state.searchedProduct?.sku === sku) {
@@ -456,142 +479,218 @@ async function deleteLocation() {
     }
 
     await loadProducts();
-
     clearSelection();
   } catch (error) {
     showMessage(message, error.message, 'error');
   }
 }
 
-
-const SPECIAL_AREAS = {
-  pieza1: { label: 'Pieza 1', spots: { estante1: 'Estante 1', estante2: 'Estante 2', estante3: 'Estante 3' } },
-  pieza2: { label: 'Pieza 2', spots: { estante1: 'Estante 1', estante2: 'Estante 2', estante3: 'Estante 3' } },
-  pieza3: { label: 'Pieza 3', spots: { estante1: 'Estante 1', estante2: 'Estante 2', estante3: 'Estante 3' } },
-  segundoPiso: { label: 'Segundo piso', spots: { pieza: 'Pieza', estante1: 'Estante 1' } },
-};
-
-function currentSpecialLabel() {
-  const area = SPECIAL_AREAS[state.specialArea];
-  return `${area.label} — ${area.spots[state.specialSpot]}`;
+function getAreaConfig(areaKey) {
+  return (state.specialConfig.areas || []).find((area) => area.key === areaKey) || null;
 }
 
-function renderSpecialSpots() {
-  const area = SPECIAL_AREAS[state.specialArea];
-  if (!area.spots[state.specialSpot]) state.specialSpot = Object.keys(area.spots)[0];
+function setSpecialArea(areaKey) {
+  state.specialSelection.areaKey = areaKey;
+  const area = getAreaConfig(areaKey);
+  state.specialSelection.spotKey = area?.spots?.[0]?.key || '';
+  renderSpecialAreaButtons();
+  renderSpecialSpotButtons();
+  syncBrowserWithSpecialSelection();
+}
 
-  $$('.special-area-card').forEach((button) => {
-    button.classList.toggle('active', button.dataset.area === state.specialArea);
-  });
+function setSpecialSpot(spotKey) {
+  state.specialSelection.spotKey = spotKey;
+  renderSpecialSpotButtons();
+  toggleSpecialPositionInput();
+  syncBrowserWithSpecialSelection();
+}
 
-  $('#special-area-title').textContent = area.label;
-  $('#special-current-title').textContent = currentSpecialLabel();
-  $('#special-list-title').textContent = currentSpecialLabel();
+function renderSpecialAreaButtons() {
+  const wrap = $('#special-area-buttons');
+  wrap.innerHTML = '';
 
-  const container = $('#special-spot-buttons');
-  container.innerHTML = '';
-  for (const [spot, label] of Object.entries(area.spots)) {
+  for (const area of state.specialConfig.areas || []) {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = `special-spot-button${state.specialSpot === spot ? ' active' : ''}`;
-    button.textContent = label;
-    button.addEventListener('click', async () => {
-      state.specialSpot = spot;
-      state.specialProduct = null;
-      $('#special-product-result').classList.add('hidden');
-      hideMessage($('#special-message'));
-      renderSpecialSpots();
-      await loadSpecialProducts();
-    });
-    container.appendChild(button);
+    button.className = `option-button${state.specialSelection.areaKey === area.key ? ' active' : ''}`;
+    button.textContent = area.label;
+    button.addEventListener('click', () => setSpecialArea(area.key));
+    wrap.appendChild(button);
   }
 }
 
-async function searchSpecialProduct(code) {
+function renderSpecialSpotButtons() {
+  const wrap = $('#special-spot-buttons');
+  wrap.innerHTML = '';
+  const area = getAreaConfig(state.specialSelection.areaKey);
+  if (!area) return;
+
+  for (const spot of area.spots || []) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `option-button${state.specialSelection.spotKey === spot.key ? ' active' : ''}`;
+    button.textContent = spot.label;
+    button.addEventListener('click', () => setSpecialSpot(spot.key));
+    wrap.appendChild(button);
+  }
+
+  toggleSpecialPositionInput();
+}
+
+function toggleSpecialPositionInput() {
+  const show = state.specialSelection.areaKey === 'SEGUNDO_PISO' && state.specialSelection.spotKey === 'PISO';
+  $('#special-position-wrap').classList.toggle('hidden', !show);
+  if (!show) $('#special-position-input').value = '';
+}
+
+function renderSpecialProduct(product) {
+  state.specialProduct = product;
+  $('#special-product-placeholder').classList.add('hidden');
+  $('#special-product-card').classList.remove('hidden');
+
+  $('#special-name').textContent = product.name;
+  $('#special-sku').textContent = `SKU: ${product.sku}`;
+  $('#special-brand').textContent = `Marca: ${product.brand || brandFromCode(product.sku)}`;
+  $('#special-stock').textContent = product.stock === null || product.stock === undefined ? '—' : product.stock;
+
+  const kind = locationKind(product.location);
+  if (kind === 'special') {
+    $('#special-current-location').textContent = `Ubicación actual: ${product.location.fullLabel}`;
+    state.specialSelection.areaKey = product.location.areaKey;
+    state.specialSelection.spotKey = product.location.spotKey;
+    $('#special-position-input').value = product.location.position || '';
+  } else if (kind === 'normal') {
+    $('#special-current-location').textContent = `Ubicación actual: ${product.location.fullLabel}. Si guardas aquí, esta ubicación de bodega se reemplazará.`;
+    state.specialSelection.areaKey = 'PIEZA_1';
+    state.specialSelection.spotKey = 'ESTANTE_1';
+    $('#special-position-input').value = '';
+  } else {
+    $('#special-current-location').textContent = 'Este producto todavía no tiene una ubicación.';
+    state.specialSelection.areaKey = 'PIEZA_1';
+    state.specialSelection.spotKey = 'ESTANTE_1';
+    $('#special-position-input').value = '';
+  }
+
+  $('#delete-special-button').classList.toggle('hidden', !product.location);
+  renderSpecialAreaButtons();
+  renderSpecialSpotButtons();
+  syncBrowserWithSpecialSelection();
+}
+
+async function searchSpecialProduct(sku) {
   hideMessage($('#special-message'));
-  $('#special-product-result').classList.add('hidden');
   try {
-    const { product } = await api(`/api/products/search?sku=${encodeURIComponent(code)}`);
-    state.specialProduct = product;
-    $('#special-product-name').textContent = product.name;
-    $('#special-product-sku').textContent = `SKU: ${product.sku}`;
-    $('#special-product-brand').textContent = `Marca: ${product.brand || brandFromCode(product.sku)}`;
-    $('#special-product-stock').textContent = product.stock === null || product.stock === undefined ? '—' : product.stock;
-    $('#special-save-button').textContent = `Asignar a ${currentSpecialLabel()}`;
-    $('#special-product-result').classList.remove('hidden');
+    const { product } = await api(`/api/products/search?sku=${encodeURIComponent(sku)}`);
+    renderSpecialProduct(product);
   } catch (error) {
     state.specialProduct = null;
     showMessage($('#special-message'), error.message, 'error');
   }
 }
 
-async function saveSpecialLocation() {
-  if (!state.specialProduct) return;
-  const message = $('#special-message');
-  hideMessage(message);
-  try {
-    const result = await api(`/api/products/${encodeURIComponent(state.specialProduct.sku)}/special-location`, {
-      method: 'PUT',
-      body: JSON.stringify({
-        area: state.specialArea,
-        spot: state.specialSpot,
-        updatedBy: $('#special-updated-by').value,
-      }),
-    });
-    showMessage(message, `${result.message} ${result.item.specialLocation.fullLabel}`, 'success');
-    state.specialProduct = null;
-    $('#special-product-result').classList.add('hidden');
-    $('#special-sku-search').value = '';
-    await loadSpecialProducts();
-    $('#special-sku-search').focus();
-  } catch (error) {
-    showMessage(message, error.message, 'error');
+function syncBrowserWithSpecialSelection() {
+  const areaSelect = $('#browser-area-select');
+  const spotSelect = $('#browser-spot-select');
+  if (state.specialSelection.areaKey) {
+    areaSelect.value = state.specialSelection.areaKey;
+    populateSpotSelect();
+    if (state.specialSelection.spotKey) spotSelect.value = state.specialSelection.spotKey;
   }
 }
 
-async function loadSpecialProducts() {
-  const payload = await api(`/api/special-locations?area=${encodeURIComponent(state.specialArea)}&spot=${encodeURIComponent(state.specialSpot)}`);
-  const list = $('#special-product-list');
-  list.innerHTML = '';
-  $('#special-count').textContent = payload.items.length;
-  $('#special-list-title').textContent = currentSpecialLabel();
+async function saveSpecialLocation() {
+  if (!state.specialProduct) return;
+  hideMessage($('#special-message'));
 
-  if (!payload.items.length) {
-    list.innerHTML = '<p class="muted">Todavía no hay productos asignados a esta ubicación.</p>';
+  const payload = {
+    areaKey: state.specialSelection.areaKey,
+    spotKey: state.specialSelection.spotKey,
+    position: $('#special-position-input').value,
+    updatedBy: $('#special-updated-by-input').value,
+  };
+
+  try {
+    const result = await api(`/api/products/${encodeURIComponent(state.specialProduct.sku)}/special-location`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+
+    state.specialProduct = result.product;
+    if (state.searchedProduct?.sku === result.product.sku) {
+      state.searchedProduct = result.product;
+      renderSearchResult(result.product);
+    }
+
+    renderSpecialProduct(result.product);
+    showMessage($('#special-message'), `${result.message} ${result.product.location.fullLabel}`, 'success');
+    await Promise.all([loadProducts().catch(() => {}), loadSpecialBrowser()]);
+  } catch (error) {
+    showMessage($('#special-message'), error.message, 'error');
+  }
+}
+
+async function deleteSpecialLocation() {
+  if (!state.specialProduct) return;
+  const accepted = confirm(`¿Quitar la ubicación actual de ${state.specialProduct.sku}?`);
+  if (!accepted) return;
+
+  try {
+    const result = await api(`/api/products/${encodeURIComponent(state.specialProduct.sku)}/special-location`, { method: 'DELETE' });
+    state.specialProduct = result.product;
+
+    if (state.searchedProduct?.sku === result.product.sku) {
+      state.searchedProduct = result.product;
+      renderSearchResult(result.product);
+    }
+
+    renderSpecialProduct(result.product);
+    showMessage($('#special-message'), result.message, 'success');
+    await Promise.all([loadProducts().catch(() => {}), loadSpecialBrowser()]);
+  } catch (error) {
+    showMessage($('#special-message'), error.message, 'error');
+  }
+}
+
+async function loadSpecialBrowser() {
+  const areaKey = $('#browser-area-select').value;
+  const spotKey = $('#browser-spot-select').value;
+  const payload = await api(`/api/special-locations?areaKey=${encodeURIComponent(areaKey)}&spotKey=${encodeURIComponent(spotKey)}`);
+
+  $('#special-product-count').textContent = payload.products.length;
+  const list = $('#special-browser-list');
+  list.innerHTML = '';
+
+  if (!payload.products.length) {
+    list.innerHTML = '<p class="muted">No hay productos en esa ubicación especial.</p>';
     return;
   }
 
-  for (const item of payload.items) {
-    const card = document.createElement('div');
-    card.className = 'special-product-item';
-    const stock = item.stock === null || item.stock === undefined ? '—' : item.stock;
-    card.innerHTML = `
-      <div class="special-product-copy">
-        <strong>${escapeHtml(item.name)}</strong>
-        <small>SKU: ${escapeHtml(item.sku)}</small>
-        <small class="brand-small">Marca: ${escapeHtml(item.brand || brandFromCode(item.sku))}</small>
+  for (const product of payload.products) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'browser-item';
+    item.innerHTML = `
+      <div>
+        <strong>${escapeHtml(product.name)}</strong>
+        <small>SKU: ${escapeHtml(product.sku)}</small>
+        <small>${escapeHtml(product.location?.fullLabel || 'Sin ubicación')}</small>
       </div>
-      <span class="stock-chip">Stock ${escapeHtml(stock)}</span>
-      <button class="danger-button special-remove-button" type="button">Quitar</button>
+      <span class="stock-chip">${escapeHtml(product.stock ?? '—')}</span>
     `;
-    card.querySelector('.special-remove-button').addEventListener('click', async () => {
-      const accepted = confirm(`¿Quitar ${item.sku} de ${currentSpecialLabel()}?`);
-      if (!accepted) return;
-      try {
-        await api(`/api/products/${encodeURIComponent(item.sku)}/special-location`, { method: 'DELETE' });
-        showMessage($('#special-message'), 'Ubicación especial eliminada.', 'success');
-        await loadSpecialProducts();
-      } catch (error) {
-        showMessage($('#special-message'), error.message, 'error');
+
+    item.addEventListener('click', () => {
+      renderSpecialProduct(product);
+      if (window.matchMedia('(max-width: 860px)').matches) {
+        $('.special-assignment-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     });
-    list.appendChild(card);
+
+    list.appendChild(item);
   }
 }
 
 function debounce(fn, delay) {
   let timer;
-
   return (...args) => {
     clearTimeout(timer);
     timer = setTimeout(() => fn(...args), delay);
@@ -599,21 +698,13 @@ function debounce(fn, delay) {
 }
 
 function setupEvents() {
-  $$('.tab').forEach((button) => {
-    button.addEventListener('click', () => setView(button.dataset.view));
-  });
+  $$('.tab').forEach((button) => button.addEventListener('click', () => setView(button.dataset.view)));
 
   $('#search-form').addEventListener('submit', (event) => {
     event.preventDefault();
-
     const code = $('#sku-search').value.trim().toUpperCase();
-
     $('#sku-search').value = code;
-
-    if (!code) {
-      return showMessage($('#search-message'), 'Debes ingresar un SKU.', 'warning');
-    }
-
+    if (!code) return showMessage($('#search-message'), 'Debes ingresar un SKU.', 'warning');
     searchProduct(code);
   });
 
@@ -623,7 +714,6 @@ function setupEvents() {
 
   $('#admin-search').addEventListener('input', (event) => {
     const cursor = event.target.selectionStart;
-
     event.target.value = event.target.value.toUpperCase();
     event.target.setSelectionRange(cursor, cursor);
   });
@@ -639,23 +729,10 @@ function setupEvents() {
     clearSelection();
     await loadProducts();
   });
-
   $('#admin-search').addEventListener('input', debounce(loadProducts, 250));
   $('#refresh-button').addEventListener('click', loadProducts);
   $('#sync-button').addEventListener('click', syncRelbase);
   $('#delete-location-button').addEventListener('click', deleteLocation);
-
-  $$('.special-area-card').forEach((button) => {
-    button.addEventListener('click', async () => {
-      state.specialArea = button.dataset.area;
-      state.specialSpot = Object.keys(SPECIAL_AREAS[state.specialArea].spots)[0];
-      state.specialProduct = null;
-      $('#special-product-result').classList.add('hidden');
-      hideMessage($('#special-message'));
-      renderSpecialSpots();
-      await loadSpecialProducts();
-    });
-  });
 
   $('#special-search-form').addEventListener('submit', (event) => {
     event.preventDefault();
@@ -669,7 +746,14 @@ function setupEvents() {
     event.target.value = event.target.value.toUpperCase().replace(/\s+/g, '');
   });
 
-  $('#special-save-button').addEventListener('click', saveSpecialLocation);
+  $('#save-special-button').addEventListener('click', saveSpecialLocation);
+  $('#delete-special-button').addEventListener('click', deleteSpecialLocation);
+  $('#browser-area-select').addEventListener('change', async () => {
+    populateSpotSelect();
+    await loadSpecialBrowser();
+  });
+  $('#browser-spot-select').addEventListener('change', loadSpecialBrowser);
+  $('#refresh-special-browser').addEventListener('click', loadSpecialBrowser);
 }
 
 setupEvents();
