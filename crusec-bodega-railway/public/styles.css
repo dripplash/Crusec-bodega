@@ -305,3 +305,125 @@ footer { padding: 0 20px 32px; text-align: center; color: var(--muted); font-siz
   .location-box { min-height: 86px; }
   .location-box strong { font-size: 1.25rem; }
 }
+
+/* Historial oculto por PIN */
+.location-meta {
+  margin: 14px 0 0;
+  color: #bfdbfe;
+  font-size: .96rem;
+  line-height: 1.45;
+}
+.location-panel.missing .location-meta {
+  color: #ffedd5;
+}
+.location-meta strong {
+  color: #ffffff;
+}
+.history-card {
+  padding: 26px;
+}
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  margin-bottom: 22px;
+}
+.history-header h2 {
+  margin: 7px 0;
+}
+.history-pin-form {
+  max-width: 620px;
+  margin-bottom: 18px;
+}
+.history-pin-form label {
+  display: block;
+  font-weight: 850;
+  margin-bottom: 8px;
+}
+.history-filter-card {
+  box-shadow: none;
+  margin: 8px 0 18px;
+  grid-template-columns: 1fr auto;
+}
+.history-list {
+  display: grid;
+  gap: 12px;
+}
+.history-item {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  padding: 16px;
+}
+.history-item-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+.history-item-top strong,
+.history-item-top span,
+.history-item-top time {
+  display: block;
+}
+.history-item-top strong {
+  font-size: 1.08rem;
+}
+.history-item-top span,
+.history-item-top time {
+  color: var(--muted);
+  font-size: .9rem;
+}
+.history-action {
+  margin: 13px 0;
+  color: #334155;
+}
+.history-change-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.history-change-grid div {
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 12px;
+}
+.history-change-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.history-change-grid p {
+  margin: 6px 0 0;
+  font-weight: 750;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .history-card {
+    padding: 18px;
+    border-radius: 22px;
+  }
+  .history-header {
+    flex-direction: column;
+  }
+  .history-header .ghost-button,
+  .history-pin-form .primary-button,
+  .history-filter-card .ghost-button {
+    width: 100%;
+  }
+  .history-filter-card {
+    grid-template-columns: 1fr;
+  }
+  .history-item-top,
+  .history-change-grid {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+}

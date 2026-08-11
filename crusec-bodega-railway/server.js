@@ -46,6 +46,7 @@ const PROJECT_DATA_DIR = path.join(__dirname, 'data');
 const DATA_DIR = path.resolve(process.env.DATA_DIR || PROJECT_DATA_DIR);
 
 const LOCATIONS_FILE = path.join(DATA_DIR, 'locations.json');
+const HISTORY_FILE = path.join(DATA_DIR, 'history.json');
 const PRODUCT_CACHE_FILE = path.join(DATA_DIR, 'products-cache.json');
 const OAUTH_STATE_FILE = path.join(DATA_DIR, 'relbase-oauth-state.json');
 
@@ -55,6 +56,8 @@ const DEMO_PRODUCTS_FILE = path.join(PROJECT_DATA_DIR, 'demo-products.json');
 const CATALOG_MODE = String(process.env.CATALOG_MODE || 'demo').toLowerCase();
 const SYNC_INTERVAL_MINUTES = Math.max(1, Number(process.env.SYNC_INTERVAL_MINUTES || 10));
 const MAX_SECOND_FLOOR_POSITION = Math.max(1, Number(process.env.MAX_SECOND_FLOOR_POSITION || 20));
+const ADMIN_PIN = String(process.env.ADMIN_PIN || '1234');
+const HISTORY_LIMIT = Math.max(100, Number(process.env.HISTORY_LIMIT || 2000));
 
 const SPECIAL_AREAS = {
   PIEZA_1: {
@@ -148,6 +151,66 @@ function writeLocations(db) {
   const tmp = `${LOCATIONS_FILE}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
   fs.renameSync(tmp, LOCATIONS_FILE);
+}
+
+function ensureHistoryFile() {
+  ensureDataDir();
+
+  if (!fs.existsSync(HISTORY_FILE)) {
+    fs.writeFileSync(HISTORY_FILE, JSON.stringify({ events: [] }, null, 2));
+  }
+}
+
+function readHistory() {
+  ensureHistoryFile();
+
+  try {
+    const parsed = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
+    return {
+      events: Array.isArray(parsed.events) ? parsed.events : [],
+    };
+  } catch (error) {
+    console.error('Error leyendo historial:', error);
+    return { events: [] };
+  }
+}
+
+function writeHistory(history) {
+  ensureHistoryFile();
+
+  const events = Array.isArray(history.events) ? history.events.slice(0, HISTORY_LIMIT) : [];
+  const tmp = `${HISTORY_FILE}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify({ events }, null, 2));
+  fs.renameSync(tmp, HISTORY_FILE);
+}
+
+function describeLocation(location) {
+  const normalized = normalizeSavedLocation(location);
+  return normalized?.fullLabel || 'Sin ubicación';
+}
+
+function appendHistoryEvent({ sku, product, action, before, after, updatedBy }) {
+  const history = readHistory();
+  const actor = String(updatedBy || 'Sin identificar').trim() || 'Sin identificar';
+
+  const event = {
+    id: `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
+    createdAt: new Date().toISOString(),
+    sku: normalizeSku(sku),
+    productName: product?.name || 'Producto sin nombre',
+    brand: product?.brand || brandFromCode(sku),
+    action,
+    updatedBy: actor,
+    before: normalizeSavedLocation(before),
+    after: normalizeSavedLocation(after),
+    beforeLabel: describeLocation(before),
+    afterLabel: describeLocation(after),
+  };
+
+  history.events.unshift(event);
+  writeHistory(history);
+
+  return event;
 }
 
 function readDemoProducts() {
@@ -653,14 +716,27 @@ async function handleApi(req, res, url) {
     if (typeof location === 'string') return sendJson(res, 400, { error: location });
 
     const db = readLocations();
+    const baseProduct = products.find((p) => normalizeSku(p.sku) === sku);
+    const previousLocation = db.locations[sku]?.location || null;
+    const updatedBy = String(body.updatedBy || 'Sin identificar').trim() || 'Sin identificar';
+
     db.locations[sku] = {
       location,
       locationUpdatedAt: new Date().toISOString(),
-      locationUpdatedBy: String(body.updatedBy || 'Sin identificar').trim() || 'Sin identificar',
+      locationUpdatedBy: updatedBy,
     };
     writeLocations(db);
 
-    const product = mergeLocation(products.find((p) => normalizeSku(p.sku) === sku), db);
+    appendHistoryEvent({
+      sku,
+      product: baseProduct,
+      action: previousLocation ? 'actualizar ubicación de bodega' : 'asignar ubicación de bodega',
+      before: previousLocation,
+      after: location,
+      updatedBy,
+    });
+
+    const product = mergeLocation(baseProduct, db);
     return sendJson(res, 200, { product: publicProduct(product), message: 'Ubicación de bodega guardada correctamente.' });
   }
 
@@ -675,14 +751,27 @@ async function handleApi(req, res, url) {
     if (typeof location === 'string') return sendJson(res, 400, { error: location });
 
     const db = readLocations();
+    const baseProduct = products.find((p) => normalizeSku(p.sku) === sku);
+    const previousLocation = db.locations[sku]?.location || null;
+    const updatedBy = String(body.updatedBy || 'Sin identificar').trim() || 'Sin identificar';
+
     db.locations[sku] = {
       location,
       locationUpdatedAt: new Date().toISOString(),
-      locationUpdatedBy: String(body.updatedBy || 'Sin identificar').trim() || 'Sin identificar',
+      locationUpdatedBy: updatedBy,
     };
     writeLocations(db);
 
-    const product = mergeLocation(products.find((p) => normalizeSku(p.sku) === sku), db);
+    appendHistoryEvent({
+      sku,
+      product: baseProduct,
+      action: previousLocation ? 'actualizar ubicación especial' : 'asignar ubicación especial',
+      before: previousLocation,
+      after: location,
+      updatedBy,
+    });
+
+    const product = mergeLocation(baseProduct, db);
     return sendJson(res, 200, { product: publicProduct(product), message: 'Ubicación especial guardada correctamente.' });
   }
 
@@ -692,11 +781,52 @@ async function handleApi(req, res, url) {
     const base = products.find((p) => normalizeSku(p.sku) === sku);
     if (!base) return sendJson(res, 404, { error: 'Producto no encontrado.' });
 
+    const body = await readBody(req);
     const db = readLocations();
+    const previousLocation = db.locations[sku]?.location || null;
+    const updatedBy = String(body.updatedBy || 'Sin identificar').trim() || 'Sin identificar';
+
     delete db.locations[sku];
     writeLocations(db);
 
+    appendHistoryEvent({
+      sku,
+      product: base,
+      action: 'quitar ubicación',
+      before: previousLocation,
+      after: null,
+      updatedBy,
+    });
+
     return sendJson(res, 200, { product: publicProduct(mergeLocation(base, db)), message: 'Ubicación eliminada.' });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/admin/history') {
+    const body = await readBody(req);
+    const pin = String(body.pin || '');
+
+    if (!ADMIN_PIN || pin !== ADMIN_PIN) {
+      return sendJson(res, 401, { error: 'PIN incorrecto.' });
+    }
+
+    const q = String(body.q || '').trim().toUpperCase();
+    const limit = Math.min(500, Math.max(1, Number(body.limit || 250)));
+    let events = readHistory().events;
+
+    if (q) {
+      events = events.filter((event) =>
+        normalizeSku(event.sku).includes(q) ||
+        String(event.productName || '').toUpperCase().includes(q) ||
+        String(event.updatedBy || '').toUpperCase().includes(q) ||
+        String(event.beforeLabel || '').toUpperCase().includes(q) ||
+        String(event.afterLabel || '').toUpperCase().includes(q)
+      );
+    }
+
+    return sendJson(res, 200, {
+      events: events.slice(0, limit),
+      total: events.length,
+    });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/sync') {
@@ -751,6 +881,7 @@ function serveStatic(res, pathname) {
 }
 
 ensureLocationFile();
+ensureHistoryFile();
 
 const server = http.createServer(async (req, res) => {
   try {

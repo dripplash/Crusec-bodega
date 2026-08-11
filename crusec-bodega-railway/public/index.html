@@ -43,17 +43,17 @@
 
       <article id="search-result" class="result-card hidden" aria-live="polite">
         <div class="result-header">
-          <div class="stock-box stock-first">
-            <span>Stock en Relbase</span>
-            <strong id="result-stock">—</strong>
-            <small id="result-stock-time">Sin información</small>
-          </div>
-
           <div class="result-summary">
             <p class="eyebrow">PRODUCTO ENCONTRADO</p>
             <h2 id="result-name"></h2>
             <p id="result-sku" class="muted"></p>
             <p id="result-brand" class="brand-line"></p>
+          </div>
+
+          <div class="stock-box stock-first">
+            <span>Stock en Relbase</span>
+            <strong id="result-stock">—</strong>
+            <small id="result-stock-time">Sin información</small>
           </div>
         </div>
 
@@ -242,6 +242,41 @@
       </div>
     </section>
   </main>
+
+    <section id="history-view" class="view hidden-admin-view">
+      <div class="section-card history-card">
+        <div class="history-header">
+          <div>
+            <p class="eyebrow">ACCESO PRIVADO</p>
+            <h2>Historial de cambios</h2>
+            <p class="muted">Este apartado queda oculto. Se abre escribiendo <strong>admin</strong> en el buscador principal.</p>
+          </div>
+          <button id="history-back-button" type="button" class="ghost-button">Volver al buscador</button>
+        </div>
+
+        <form id="history-pin-form" class="history-pin-form">
+          <label for="history-pin-input">PIN administrador</label>
+          <div class="search-row">
+            <input id="history-pin-input" type="password" inputmode="numeric" autocomplete="off" placeholder="Ingresa tu PIN" />
+            <button type="submit" class="primary-button">Ver historial</button>
+          </div>
+        </form>
+
+        <div id="history-message" class="message hidden" role="status"></div>
+
+        <div id="history-content" class="hidden">
+          <div class="filters-card history-filter-card">
+            <input id="history-search" placeholder="Filtrar por SKU, nombre, persona o ubicación" autocomplete="off" />
+            <button id="history-refresh-button" type="button" class="ghost-button">Actualizar</button>
+          </div>
+          <div class="section-heading">
+            <h3>Registro</h3>
+            <span id="history-count" class="count-badge">0</span>
+          </div>
+          <div id="history-list" class="history-list"></div>
+        </div>
+      </div>
+    </section>
 
   <footer>
     <span id="connection-indicator" class="connection-indicator">Comprobando conexión…</span>

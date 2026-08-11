@@ -32,3 +32,15 @@ Las credenciales deben configurarse como variables privadas del hosting, nunca d
 ## Dominio
 
 Primero se despliega y prueba con la URL temporal de Railway. Al final se crea `bodega.crusec.cl` en DNS apuntando al dominio que entregue Railway.
+
+## Historial privado
+
+El historial no aparece como pestaña visible. Para abrirlo, escribe `admin` en el buscador principal.
+
+El sistema pedirá un PIN de administrador. En Railway se recomienda configurar:
+
+`ADMIN_PIN=tu_pin_privado`
+
+Si no se configura `ADMIN_PIN`, la app usa temporalmente `1234`. Cámbialo en Railway antes de dejarlo en uso real.
+
+El historial se guarda en el volumen `/data` en el archivo `history.json`. Registra SKU, nombre del producto, quién hizo el cambio, fecha, ubicación anterior y ubicación nueva.

@@ -17,6 +17,8 @@ const state = {
     areaKey: '',
     spotKey: '',
   },
+  adminPin: '',
+  historyUnlocked: false,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -185,7 +187,16 @@ async function searchProduct(sku) {
   }
 }
 
-function renderNormalLocationContent(location, missing = false) {
+function renderUpdateMeta(product) {
+  if (!product?.locationUpdatedAt && !product?.locationUpdatedBy) return '';
+
+  const who = product.locationUpdatedBy || 'Sin identificar';
+  const when = product.locationUpdatedAt ? formatDate(product.locationUpdatedAt) : 'Sin fecha';
+
+  return `<p class="location-meta">Última actualización: <strong>${escapeHtml(who)}</strong> · ${escapeHtml(when)}</p>`;
+}
+
+function renderNormalLocationContent(location, missing = false, product = null) {
   const aisle = missing ? '—' : escapeHtml(location.aisle);
   const side = missing ? '—' : escapeHtml(location.sideLabel);
   const rack = missing ? '—' : escapeHtml(location.rack);
@@ -202,10 +213,11 @@ function renderNormalLocationContent(location, missing = false) {
       <div class="location-box"><span>Nivel</span><strong>${level}</strong></div>
     </div>
     <p class="location-full ${missing ? 'missing-copy' : ''}">${summary}</p>
+    ${renderUpdateMeta(product)}
   `;
 }
 
-function renderSpecialLocationContent(location) {
+function renderSpecialLocationContent(location, product = null) {
   const hasPosition = Number.isInteger(location.position);
 
   return `
@@ -215,6 +227,7 @@ function renderSpecialLocationContent(location) {
       <div class="location-box"><span>Posición</span><strong>${hasPosition ? escapeHtml(location.position) : '—'}</strong></div>
     </div>
     <p class="location-full">${escapeHtml(location.fullLabel)}</p>
+    ${renderUpdateMeta(product)}
   `;
 }
 
@@ -234,15 +247,15 @@ function renderSearchResult(product) {
   panel.classList.remove('missing', 'special-panel');
 
   if (kind === 'normal') {
-    content.innerHTML = renderNormalLocationContent(product.location, false);
+    content.innerHTML = renderNormalLocationContent(product.location, false, product);
     $('#edit-result-button').textContent = 'Editar ubicación';
   } else if (kind === 'special') {
     panel.classList.add('special-panel');
-    content.innerHTML = renderSpecialLocationContent(product.location);
+    content.innerHTML = renderSpecialLocationContent(product.location, product);
     $('#edit-result-button').textContent = 'Editar ubicación especial';
   } else {
     panel.classList.add('missing');
-    content.innerHTML = renderNormalLocationContent({}, true);
+    content.innerHTML = renderNormalLocationContent({}, true, product);
     $('#edit-result-button').textContent = 'Asignar ubicación';
   }
 
@@ -470,7 +483,10 @@ async function deleteLocation() {
 
   const message = $('#admin-message');
   try {
-    const result = await api(`/api/products/${encodeURIComponent(sku)}/location`, { method: 'DELETE' });
+    const result = await api(`/api/products/${encodeURIComponent(sku)}/location`, {
+      method: 'DELETE',
+      body: JSON.stringify({ updatedBy: $('#updated-by-input').value }),
+    });
     showMessage(message, result.message, 'success');
 
     if (state.searchedProduct?.sku === sku) {
@@ -635,7 +651,10 @@ async function deleteSpecialLocation() {
   if (!accepted) return;
 
   try {
-    const result = await api(`/api/products/${encodeURIComponent(state.specialProduct.sku)}/special-location`, { method: 'DELETE' });
+    const result = await api(`/api/products/${encodeURIComponent(state.specialProduct.sku)}/special-location`, {
+      method: 'DELETE',
+      body: JSON.stringify({ updatedBy: $('#special-updated-by-input').value }),
+    });
     state.specialProduct = result.product;
 
     if (state.searchedProduct?.sku === result.product.sku) {
@@ -689,6 +708,61 @@ async function loadSpecialBrowser() {
   }
 }
 
+function openHiddenAdmin() {
+  hideMessage($('#search-message'));
+  showView('history');
+  $('#history-pin-input').value = '';
+  $('#history-message').className = 'message hidden';
+  setTimeout(() => $('#history-pin-input').focus(), 40);
+}
+
+async function loadHistory() {
+  const pin = state.adminPin || $('#history-pin-input').value.trim();
+  const q = $('#history-search').value.trim();
+
+  const payload = await api('/api/admin/history', {
+    method: 'POST',
+    body: JSON.stringify({ pin, q, limit: 300 }),
+  });
+
+  state.adminPin = pin;
+  state.historyUnlocked = true;
+  $('#history-content').classList.remove('hidden');
+  $('#history-count').textContent = payload.events.length;
+
+  renderHistory(payload.events);
+}
+
+function renderHistory(events) {
+  const list = $('#history-list');
+  list.innerHTML = '';
+
+  if (!events.length) {
+    list.innerHTML = '<p class="muted">No hay registros para mostrar.</p>';
+    return;
+  }
+
+  for (const event of events) {
+    const item = document.createElement('article');
+    item.className = 'history-item';
+    item.innerHTML = `
+      <div class="history-item-top">
+        <div>
+          <strong>${escapeHtml(event.sku)}</strong>
+          <span>${escapeHtml(event.productName || 'Producto sin nombre')}</span>
+        </div>
+        <time>${escapeHtml(formatDate(event.createdAt))}</time>
+      </div>
+      <p class="history-action"><strong>${escapeHtml(event.updatedBy || 'Sin identificar')}</strong> · ${escapeHtml(event.action || 'cambio')}</p>
+      <div class="history-change-grid">
+        <div><span>Antes</span><p>${escapeHtml(event.beforeLabel || 'Sin ubicación')}</p></div>
+        <div><span>Después</span><p>${escapeHtml(event.afterLabel || 'Sin ubicación')}</p></div>
+      </div>
+    `;
+    list.appendChild(item);
+  }
+}
+
 function debounce(fn, delay) {
   let timer;
   return (...args) => {
@@ -705,6 +779,13 @@ function setupEvents() {
     const code = $('#sku-search').value.trim().toUpperCase();
     $('#sku-search').value = code;
     if (!code) return showMessage($('#search-message'), 'Debes ingresar un SKU.', 'warning');
+
+    if (code === 'ADMIN') {
+      $('#sku-search').value = '';
+      openHiddenAdmin();
+      return;
+    }
+
     searchProduct(code);
   });
 
@@ -754,6 +835,38 @@ function setupEvents() {
   });
   $('#browser-spot-select').addEventListener('change', loadSpecialBrowser);
   $('#refresh-special-browser').addEventListener('click', loadSpecialBrowser);
+
+  $('#history-back-button').addEventListener('click', () => setView('search'));
+  $('#history-pin-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    hideMessage($('#history-message'));
+
+    try {
+      await loadHistory();
+      showMessage($('#history-message'), 'Historial desbloqueado.', 'success');
+    } catch (error) {
+      state.adminPin = '';
+      state.historyUnlocked = false;
+      $('#history-content').classList.add('hidden');
+      showMessage($('#history-message'), error.message, 'error');
+    }
+  });
+  $('#history-search').addEventListener('input', debounce(async () => {
+    if (!state.historyUnlocked) return;
+    try {
+      await loadHistory();
+    } catch (error) {
+      showMessage($('#history-message'), error.message, 'error');
+    }
+  }, 250));
+  $('#history-refresh-button').addEventListener('click', async () => {
+    if (!state.historyUnlocked) return;
+    try {
+      await loadHistory();
+    } catch (error) {
+      showMessage($('#history-message'), error.message, 'error');
+    }
+  });
 }
 
 setupEvents();
