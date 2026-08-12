@@ -428,67 +428,285 @@ function renderProductList() {
   }
 }
 
+function renderNormalOptionGroup(
+  containerId,
+  options,
+  selectedValue,
+  onSelect
+) {
+  const container = $(`#${containerId}`);
+
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  for (const option of options) {
+    const value = String(
+      typeof option === 'object'
+        ? option.value
+        : option
+    );
+
+    const label =
+      typeof option === 'object'
+        ? option.label
+        : String(option);
+
+    const button = document.createElement('button');
+
+    button.type = 'button';
+
+    button.className =
+      `option-button normal-option-button${
+        String(selectedValue) === value
+          ? ' active'
+          : ''
+      }`;
+
+    button.textContent = label;
+
+    button.addEventListener('click', () => {
+      onSelect(value);
+    });
+
+    container.appendChild(button);
+  }
+}
+
+
+function renderNormalLocationButtons() {
+
+  // PASILLO 1 AL 6
+  renderNormalOptionGroup(
+    'aisle-buttons',
+    [1, 2, 3, 4, 5, 6],
+    $('#aisle-input').value,
+    (value) => {
+
+      $('#aisle-input').value = value;
+
+      renderNormalLocationButtons();
+    }
+  );
+
+
+  // LADO IZQUIERDO / DERECHO
+  renderNormalOptionGroup(
+    'side-buttons',
+    [
+      {
+        value: 'I',
+        label: 'Izquierdo'
+      },
+      {
+        value: 'D',
+        label: 'Derecho'
+      }
+    ],
+    $('#side-input').value,
+    (value) => {
+
+      $('#side-input').value = value;
+
+      renderNormalLocationButtons();
+    }
+  );
+
+
+  // RACK 1 AL 11
+  renderNormalOptionGroup(
+    'rack-buttons',
+    [
+      1, 2, 3, 4, 5, 6,
+      7, 8, 9, 10, 11
+    ],
+    $('#rack-input').value,
+    (value) => {
+
+      $('#rack-input').value = value;
+
+      renderNormalLocationButtons();
+    }
+  );
+
+
+  // NIVEL 1 AL 5
+  renderNormalOptionGroup(
+    'level-buttons',
+    [1, 2, 3, 4, 5],
+    $('#level-input').value,
+    (value) => {
+
+      $('#level-input').value = value;
+
+      renderNormalLocationButtons();
+    }
+  );
+}
+
+
 function selectProduct(product) {
+
   state.selectedProduct = product;
 
   const assignmentCard = $('#assignment-card');
 
   assignmentCard.classList.remove('empty');
-  $('#assignment-empty').classList.add('hidden');
-  $('#assignment-content').classList.remove('hidden');
 
-  $('#assign-name').textContent = product.name;
-  $('#assign-sku').textContent = `SKU: ${product.sku}`;
-  $('#assign-brand').textContent = `Marca: ${product.brand || brandFromCode(product.sku)}`;
-  $('#assign-stock').textContent = product.stock === null || product.stock === undefined ? '—' : product.stock;
+  $('#assignment-empty')
+    .classList.add('hidden');
 
-  const kind = locationKind(product.location);
-  const currentLocation = $('#assignment-current-location');
+  $('#assignment-content')
+    .classList.remove('hidden');
+
+
+  // DATOS DEL PRODUCTO
+  $('#assign-name').textContent =
+    product.name;
+
+  $('#assign-sku').textContent =
+    `SKU: ${product.sku}`;
+
+  $('#assign-brand').textContent =
+    `Marca: ${
+      product.brand ||
+      brandFromCode(product.sku)
+    }`;
+
+  $('#assign-stock').textContent =
+    product.stock === null ||
+    product.stock === undefined
+      ? '—'
+      : product.stock;
+
+
+  const kind =
+    locationKind(product.location);
+
+  const currentLocation =
+    $('#assignment-current-location');
 
   currentLocation.classList.add('hidden');
 
-  if (kind === 'normal') {
-    $('#aisle-input').value = product.location.aisle || '';
-    $('#side-input').value = product.location.side || '';
-    $('#rack-input').value = product.location.rack || '';
-    $('#level-input').value = product.location.level || '';
 
-    $('#assignment-mode').textContent = 'EDITAR UBICACIÓN DE BODEGA';
-    $('#save-location-button').textContent = 'Actualizar ubicación';
-  } else {
+  /*
+   * SI YA TIENE UNA UBICACIÓN NORMAL
+   * cargamos automáticamente los botones.
+   */
+  if (kind === 'normal') {
+
+    $('#aisle-input').value =
+      product.location.aisle || '';
+
+    $('#side-input').value =
+      product.location.side || '';
+
+    $('#rack-input').value =
+      product.location.rack || '';
+
+    $('#level-input').value =
+      product.location.level || '';
+
+
+    $('#assignment-mode').textContent =
+      'EDITAR UBICACIÓN DE BODEGA';
+
+    $('#save-location-button').textContent =
+      'Actualizar ubicación';
+  }
+
+  /*
+   * SI NO TIENE UBICACIÓN NORMAL
+   * limpiamos las opciones.
+   */
+  else {
+
     $('#aisle-input').value = '';
+
     $('#side-input').value = '';
+
     $('#rack-input').value = '';
+
     $('#level-input').value = '';
 
-    $('#assignment-mode').textContent = 'ASIGNAR UBICACIÓN DE BODEGA';
-    $('#save-location-button').textContent = 'Guardar ubicación';
+
+    $('#assignment-mode').textContent =
+      'ASIGNAR UBICACIÓN DE BODEGA';
+
+    $('#save-location-button').textContent =
+      'Guardar ubicación';
   }
 
+
+  /*
+   * MOSTRAR UBICACIÓN ACTUAL
+   */
   if (kind === 'special') {
-    currentLocation.textContent = `Ubicación actual: ${product.location.fullLabel}. Si guardas aquí, esa ubicación especial se reemplazará.`;
-    currentLocation.classList.remove('hidden');
-  } else if (kind === 'normal') {
-    currentLocation.textContent = `Ubicación actual: ${product.location.fullLabel}`;
-    currentLocation.classList.remove('hidden');
+
+    currentLocation.textContent =
+      `Ubicación actual: ${
+        product.location.fullLabel
+      }. Si guardas aquí, esa ubicación especial se reemplazará.`;
+
+    currentLocation.classList
+      .remove('hidden');
   }
 
-  $('#delete-location-button').classList.toggle('hidden', !product.location);
+  else if (kind === 'normal') {
 
+    currentLocation.textContent =
+      `Ubicación actual: ${
+        product.location.fullLabel
+      }`;
+
+    currentLocation.classList
+      .remove('hidden');
+  }
+
+
+  /*
+   * MOSTRAR / OCULTAR BOTÓN BORRAR
+   */
+  $('#delete-location-button')
+    .classList.toggle(
+      'hidden',
+      !product.location
+    );
+
+
+  /*
+   * CREAR BOTONES DE
+   * PASILLO / LADO / RACK / NIVEL
+   */
+  renderNormalLocationButtons();
+
+
+  /*
+   * ACTUALIZAR LISTA
+   */
   renderProductList();
 
+
+  /*
+   * EN CELULAR LLEVAR AUTOMÁTICAMENTE
+   * AL FORMULARIO
+   */
   setTimeout(() => {
-    const isMobile = window.matchMedia('(max-width: 860px)').matches;
+
+    const isMobile =
+      window.matchMedia(
+        '(max-width: 860px)'
+      ).matches;
+
 
     if (isMobile) {
+
       assignmentCard.scrollIntoView({
         behavior: 'smooth',
         block: 'start',
       });
     }
 
-    $('#aisle-input').focus();
-    $('#aisle-input').select();
   }, 80);
 }
 
