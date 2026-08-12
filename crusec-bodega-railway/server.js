@@ -388,8 +388,8 @@ function validateNormalLocation(input) {
 
   const maxAisle = Number(process.env.MAX_AISLE || 6);
   const maxRack = Number(process.env.MAX_RACK || 11);
-  const maxLevel = Number(process.env.MAX_LEVEL || 6);
-
+  const maxLevel = Number(process.env.MAX_LEVEL || 5);
+  
   if (!Number.isInteger(aisle) || aisle < 1 || aisle > maxAisle) {
     return `El pasillo debe estar entre 1 y ${maxAisle}.`;
   }
