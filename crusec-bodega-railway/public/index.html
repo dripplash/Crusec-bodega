@@ -129,34 +129,99 @@
             <p id="assignment-current-location" class="inline-note hidden"></p>
 
             <form id="assignment-form" class="assignment-form">
-              <label>
-                <span>Pasillo</span>
-                <input id="aisle-input" name="aisle" type="number" min="1" max="6" inputmode="numeric" placeholder="1" />
-              </label>
 
-              <label>
-                <span>Lado</span>
-                <input id="side-input" name="side" maxlength="1" autocomplete="off" placeholder="D o I" />
+              <!-- PASILLO -->
+              <div class="normal-location-step">
+                <span class="normal-location-title">Pasillo</span>
+            
+                <div id="aisle-buttons" class="normal-option-grid"></div>
+            
+                <input
+                  id="aisle-input"
+                  name="aisle"
+                  type="hidden"
+                />
+              </div>
+            
+            
+              <!-- LADO -->
+              <div class="normal-location-step">
+                <span class="normal-location-title">Lado</span>
+            
+                <div
+                  id="side-buttons"
+                  class="normal-option-grid side-option-grid"
+                ></div>
+            
+                <input
+                  id="side-input"
+                  name="side"
+                  type="hidden"
+                />
+            
                 <small>D = Derecho · I = Izquierdo</small>
-              </label>
-
-              <label>
-                <span>Rack</span>
-                <input id="rack-input" name="rack" type="number" min="1" max="11" inputmode="numeric" placeholder="1" />
-              </label>
-
-              <label>
-                <span>Nivel</span>
-                <input id="level-input" name="level" type="number" min="1" max="6" inputmode="numeric" placeholder="1" />
-              </label>
-
+              </div>
+            
+            
+              <!-- RACK -->
+              <div class="normal-location-step">
+                <span class="normal-location-title">Rack</span>
+            
+                <div id="rack-buttons" class="normal-option-grid"></div>
+            
+                <input
+                  id="rack-input"
+                  name="rack"
+                  type="hidden"
+                />
+              </div>
+            
+            
+              <!-- NIVEL -->
+              <div class="normal-location-step">
+                <span class="normal-location-title">Nivel</span>
+            
+                <div id="level-buttons" class="normal-option-grid"></div>
+            
+                <input
+                  id="level-input"
+                  name="level"
+                  type="hidden"
+                />
+              </div>
+            
+            
+              <!-- NOMBRE -->
               <label>
                 <span>Tu Nombre </span>
-                <input id="updated-by-input" name="updatedBy" autocomplete="name" placeholder="Para saber quién hizo el cambio" />
+            
+                <input
+                  id="updated-by-input"
+                  name="updatedBy"
+                  autocomplete="name"
+                  placeholder="Para saber quién hizo el cambio"
+                />
               </label>
-
-              <button id="save-location-button" class="primary-button wide" type="submit">Guardar ubicación</button>
-              <button id="delete-location-button" class="danger-button wide hidden" type="button">Quitar ubicación actual</button>
+            
+            
+              <!-- BOTONES -->
+              <button
+                id="save-location-button"
+                class="primary-button wide"
+                type="submit"
+              >
+                Guardar ubicación
+              </button>
+            
+            
+              <button
+                id="delete-location-button"
+                class="danger-button wide hidden"
+                type="button"
+              >
+                Quitar ubicación actual
+              </button>
+            
             </form>
 
             <p class="keyboard-tip">Usa <kbd>Enter</kbd> para avanzar entre Pasillo, Lado, Rack y Nivel.</p>
