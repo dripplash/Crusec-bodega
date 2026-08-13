@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
 const crypto = require('crypto');
+const XLSX = require('xlsx');
 
 function loadEnvFile() {
   const envPath = path.join(__dirname, '.env');
@@ -701,7 +702,152 @@ function locationKind(location) {
   return location.type === 'special' ? 'special' : 'normal';
 }
 
+function safeExcelValue(value) {
+  return value === undefined || value === null ? '' : value;
+}
+
+function exportTypeLabel(type) {
+  if (type === 'full') return 'Ubicacion_Completa';
+  if (type === 'simple') return 'Lista_Simple';
+  if (type === 'notes') return 'Observaciones';
+  return 'Inventario';
+}
+
+function buildAisleExportRows(products, type) {
+  if (type === 'full') {
+    return [
+      ['SKU', 'Nombre', 'Pasillo', 'Lado', 'Rack', 'Nivel', 'Stock Relbase'],
+      ...products.map((product) => [
+        safeExcelValue(product.sku),
+        safeExcelValue(product.name),
+        safeExcelValue(product.location?.aisle),
+        safeExcelValue(product.location?.sideLabel),
+        safeExcelValue(product.location?.rack),
+        safeExcelValue(product.location?.level),
+        safeExcelValue(product.stock),
+      ]),
+    ];
+  }
+
+  if (type === 'simple') {
+    return [
+      ['SKU', 'Nombre', 'Pasillo'],
+      ...products.map((product) => [
+        safeExcelValue(product.sku),
+        safeExcelValue(product.name),
+        safeExcelValue(product.location?.aisle),
+      ]),
+    ];
+  }
+
+  if (type === 'notes') {
+    return [
+      ['SKU', 'Nombre', 'Pasillo', 'Acción sugerida', 'Observación'],
+      ...products.map((product) => [
+        safeExcelValue(product.sku),
+        safeExcelValue(product.name),
+        safeExcelValue(product.location?.aisle),
+        '',
+        '',
+      ]),
+    ];
+  }
+
+  return null;
+}
+
+function workbookBufferFromRows(rows, sheetName = 'Inventario') {
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.aoa_to_sheet(rows);
+
+  worksheet['!cols'] = [
+    { wch: 18 },
+    { wch: 55 },
+    { wch: 12 },
+    { wch: 18 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 16 },
+  ];
+
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+
+  return XLSX.write(workbook, {
+    type: 'buffer',
+    bookType: 'xlsx',
+  });
+}
+
+async function sendAisleExport(res, aisle, type) {
+  const products = await productSnapshot();
+
+  const aisleProducts = products
+    .filter((product) =>
+      product.location?.type === 'normal' &&
+      Number(product.location.aisle) === Number(aisle)
+    )
+    .sort((a, b) => {
+      const sideA = String(a.location?.side || '');
+      const sideB = String(b.location?.side || '');
+      const rackA = Number(a.location?.rack || 0);
+      const rackB = Number(b.location?.rack || 0);
+      const levelA = Number(a.location?.level || 0);
+      const levelB = Number(b.location?.level || 0);
+
+      if (sideA !== sideB) return sideA.localeCompare(sideB);
+      if (rackA !== rackB) return rackA - rackB;
+      if (levelA !== levelB) return levelA - levelB;
+
+      return normalizeSku(a.sku).localeCompare(normalizeSku(b.sku));
+    });
+
+  if (!aisleProducts.length) {
+    return sendJson(res, 404, {
+      error: `No hay productos con ubicación guardada en el Pasillo ${aisle}.`,
+    });
+  }
+
+  const rows = buildAisleExportRows(aisleProducts, type);
+
+  if (!rows) {
+    return sendJson(res, 400, {
+      error: 'Tipo de Excel no válido.',
+    });
+  }
+
+  const buffer = workbookBufferFromRows(rows, `Pasillo ${aisle}`);
+  const fileName = `Pasillo_${aisle}_${exportTypeLabel(type)}.xlsx`;
+
+  res.writeHead(200, {
+    'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'Content-Disposition': `attachment; filename="${fileName}"`,
+    'Content-Length': buffer.length,
+    'Cache-Control': 'no-store',
+  });
+
+  return res.end(buffer);
+}
+
 async function handleApi(req, res, url) {
+    if (req.method === 'GET' && url.pathname === '/api/exports/aisle') {
+    const aisle = Number(url.searchParams.get('aisle'));
+    const type = String(url.searchParams.get('type') || 'full');
+
+    if (!Number.isInteger(aisle) || aisle < 1 || aisle > 6) {
+      return sendJson(res, 400, {
+        error: 'Debes elegir un pasillo entre 1 y 6.',
+      });
+    }
+
+    if (!['full', 'simple', 'notes'].includes(type)) {
+      return sendJson(res, 400, {
+        error: 'Tipo de Excel no válido.',
+      });
+    }
+
+    return sendAisleExport(res, aisle, type);
+  }
+  
   if (req.method === 'GET' && url.pathname === '/api/status') {
     let relbaseStatus = null;
     let productCount = 0;
