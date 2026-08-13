@@ -604,15 +604,6 @@ function buildProductLookupUrls(sku) {
   };
 
   /*
-   * Intento directo por ruta.
-   * Ejemplo:
-   * /api/v2/productos/C02210
-   */
-  try {
-    addUrl(new URL(`${RELBASE_PRODUCTS_URL.replace(/\/+$/, '')}/${encodeURIComponent(sku)}`));
-  } catch {}
-
-  /*
    * Intentos por filtros.
    * Si Relbase ignora alguno, no importa:
    * igual validamos que el SKU coincida exacto.
