@@ -83,6 +83,43 @@
           <button id="sync-button" class="secondary-button">Sincronizar con Relbase</button>
         </div>
       </div>
+      <div class="section-card export-card">
+  <div>
+    <p class="eyebrow">INVENTARIO</p>
+    <h3>Exportar productos por pasillo</h3>
+    <p class="muted">
+      Elige un pasillo y descarga un archivo Excel.
+    </p>
+  </div>
+
+  <div class="export-controls">
+    <label>
+      <span>Pasillo</span>
+      <select id="export-aisle-select">
+        <option value="1">Pasillo 1</option>
+        <option value="2">Pasillo 2</option>
+        <option value="3">Pasillo 3</option>
+        <option value="4">Pasillo 4</option>
+        <option value="5">Pasillo 5</option>
+        <option value="6">Pasillo 6</option>
+      </select>
+    </label>
+
+    <div class="export-buttons">
+      <button id="export-full-button" class="secondary-button" type="button">
+        Excel ubicación completa
+      </button>
+
+      <button id="export-simple-button" class="secondary-button" type="button">
+        Excel lista simple
+      </button>
+
+      <button id="export-notes-button" class="secondary-button" type="button">
+        Excel con observaciones
+      </button>
+    </div>
+  </div>
+</div>
 
       <div class="filters-card">
         <input id="admin-search" placeholder="Buscar SKU, nombre o marca" autocomplete="off" />
