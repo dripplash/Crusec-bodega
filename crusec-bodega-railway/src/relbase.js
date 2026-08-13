@@ -9,8 +9,10 @@ const RELBASE_BASE_URL = String(process.env.RELBASE_BASE_URL || 'https://api.rel
 const RELBASE_AUTH_URL = process.env.RELBASE_AUTH_URL || `${RELBASE_BASE_URL}/oauth/authorize`;
 const RELBASE_TOKEN_URL = process.env.RELBASE_TOKEN_URL || `${RELBASE_BASE_URL}/oauth/token`;
 const RELBASE_PRODUCTS_URL = process.env.RELBASE_PRODUCTS_URL || `${RELBASE_BASE_URL}/api/v2/productos`;
-const RELBASE_MAX_PAGES = Math.max(1, Number(process.env.RELBASE_MAX_PAGES || 300));
-
+const RELBASE_SAFETY_MAX_PAGES = Math.max(
+  500,
+  Number(process.env.RELBASE_SAFETY_MAX_PAGES || 5000)
+);
 function ensureDataDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -185,7 +187,7 @@ function status() {
     authorized: Boolean(token?.refresh_token || token?.access_token),
     tokenExpiresAt: token?.expires_at || null,
     productsUrl: RELBASE_PRODUCTS_URL,
-    maxPages: RELBASE_MAX_PAGES,
+    safetyMaxPages: RELBASE_SAFETY_MAX_PAGES,
   };
 }
 
@@ -522,9 +524,23 @@ async function listProducts() {
   let url = RELBASE_PRODUCTS_URL;
   const all = [];
   const seenUrls = new Set();
+  let pageCount = 0;
 
-  for (let page = 0; page < RELBASE_MAX_PAGES && url; page += 1) {
-    if (seenUrls.has(url)) break;
+  while (url) {
+    pageCount += 1;
+
+    if (pageCount > RELBASE_SAFETY_MAX_PAGES) {
+      throw new Error(
+        `Relbase superó el límite de seguridad de ${RELBASE_SAFETY_MAX_PAGES} páginas. Se detuvo para proteger Railway.`
+      );
+    }
+
+    if (seenUrls.has(url)) {
+      throw new Error(
+        `Relbase repitió una página durante la sincronización. Se detuvo para evitar un ciclo infinito.`
+      );
+    }
+
     seenUrls.add(url);
 
     let payload;
@@ -538,12 +554,17 @@ async function listProducts() {
         accessToken = refreshed.access_token;
         payload = await fetchProductsPage(url, accessToken);
       } else {
+        error.message = `Error sincronizando Relbase en página ${pageCount}: ${error.message}`;
         throw error;
       }
     }
 
     const products = extractProducts(payload);
     all.push(...products);
+
+    console.log(
+      `Relbase página ${pageCount}: ${products.length} productos. Total acumulado: ${all.length}`
+    );
 
     url = nextPageUrl(payload, url);
   }
@@ -558,12 +579,168 @@ async function listProducts() {
     unique.set(product.sku, product);
   }
 
+  console.log(`Sincronización Relbase terminada: ${unique.size} productos únicos.`);
+
   return [...unique.values()];
 }
 
+function productMatchesSku(product, sku) {
+  const normalized = normalizeProduct(product);
+
+  return (
+    normalized.sku === sku ||
+    cleanSku(normalized.barcode) === sku ||
+    cleanSku(normalized.relbaseId) === sku
+  );
+}
+
+function buildProductLookupUrls(sku) {
+  const urls = [];
+  const base = new URL(RELBASE_PRODUCTS_URL);
+
+  const addUrl = (url) => {
+    const value = url.toString();
+    if (!urls.includes(value)) urls.push(value);
+  };
+
+  /*
+   * Intento directo por ruta.
+   * Ejemplo:
+   * /api/v2/productos/C02210
+   */
+  try {
+    addUrl(new URL(`${RELBASE_PRODUCTS_URL.replace(/\/+$/, '')}/${encodeURIComponent(sku)}`));
+  } catch {}
+
+  /*
+   * Intentos por filtros.
+   * Si Relbase ignora alguno, no importa:
+   * igual validamos que el SKU coincida exacto.
+   */
+  for (const key of ['sku', 'codigo', 'code', 'q', 'search', 'busqueda']) {
+    const url = new URL(base.toString());
+    url.searchParams.set(key, sku);
+    addUrl(url);
+  }
+
+  return urls;
+}
+
+async function fetchProductLookupPayload(url, accessToken) {
+  const response = await fetch(url, {
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  const text = await response.text();
+  let payload = {};
+
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    payload = { raw: text };
+  }
+
+  if (response.status === 404) return null;
+
+  if (!response.ok) {
+    const error = new Error(
+      payload.error_description ||
+      payload.error ||
+      `Relbase rechazó la búsqueda puntual de producto (${response.status}).`
+    );
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  return payload;
+}
+
+function singleProductCandidates(payload) {
+  const candidates = [];
+
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    candidates.push(payload);
+
+    if (payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)) {
+      candidates.push(payload.data);
+    }
+
+    if (payload.product && typeof payload.product === 'object') {
+      candidates.push(payload.product);
+    }
+
+    if (payload.producto && typeof payload.producto === 'object') {
+      candidates.push(payload.producto);
+    }
+
+    if (payload.resource && typeof payload.resource === 'object') {
+      candidates.push(payload.resource);
+    }
+  }
+
+  return candidates;
+}
+
+async function findProductBySku(skuInput) {
+  const sku = cleanSku(skuInput);
+  if (!sku) return null;
+
+  let accessToken = await getValidAccessToken();
+  const urls = buildProductLookupUrls(sku);
+
+  for (const url of urls) {
+    let payload;
+
+    try {
+      payload = await fetchProductLookupPayload(url, accessToken);
+    } catch (error) {
+      if (error.status === 401) {
+        console.warn('Relbase respondió 401 en búsqueda puntual. Renovando token...');
+        const refreshed = await refreshAccessToken();
+        accessToken = refreshed.access_token;
+        payload = await fetchProductLookupPayload(url, accessToken);
+      } else {
+        throw error;
+      }
+    }
+
+    if (!payload) continue;
+
+    /*
+     * Caso 1:
+     * Relbase devuelve una lista de productos.
+     */
+    const products = extractProducts(payload);
+    const match = products.find((product) => productMatchesSku(product, sku));
+
+    if (match) {
+      return normalizeProduct(match);
+    }
+
+    /*
+     * Caso 2:
+     * Relbase devuelve un solo producto como objeto,
+     * o lo devuelve dentro de data/product/producto/resource.
+     */
+    for (const candidate of singleProductCandidates(payload)) {
+      const normalized = normalizeProduct(candidate);
+
+      if (normalized.sku && productMatchesSku(candidate, sku)) {
+        return normalized;
+      }
+    }
+  }
+
+  return null;
+}
 module.exports = {
   getAuthUrl,
   exchangeCodeForToken,
   listProducts,
+  findProductBySku,
   status,
 };
