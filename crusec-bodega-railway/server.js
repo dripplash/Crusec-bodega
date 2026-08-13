@@ -787,20 +787,26 @@ async function sendAisleExport(res, aisle, type) {
       Number(product.location.aisle) === Number(aisle)
     )
     .sort((a, b) => {
-      const sideA = String(a.location?.side || '');
-      const sideB = String(b.location?.side || '');
-      const rackA = Number(a.location?.rack || 0);
-      const rackB = Number(b.location?.rack || 0);
-      const levelA = Number(a.location?.level || 0);
-      const levelB = Number(b.location?.level || 0);
+  const sideOrder = {
+    I: 1,
+    D: 2,
+  };
 
-      if (sideA !== sideB) return sideA.localeCompare(sideB);
-      if (rackA !== rackB) return rackA - rackB;
-      if (levelA !== levelB) return levelA - levelB;
+  const sideA = sideOrder[String(a.location?.side || '').toUpperCase()] || 99;
+  const sideB = sideOrder[String(b.location?.side || '').toUpperCase()] || 99;
 
-      return normalizeSku(a.sku).localeCompare(normalizeSku(b.sku));
-    });
+  const rackA = Number(a.location?.rack || 0);
+  const rackB = Number(b.location?.rack || 0);
 
+  const levelA = Number(a.location?.level || 0);
+  const levelB = Number(b.location?.level || 0);
+
+  if (sideA !== sideB) return sideA - sideB;
+  if (rackA !== rackB) return rackA - rackB;
+  if (levelA !== levelB) return levelA - levelB;
+
+  return normalizeSku(a.sku).localeCompare(normalizeSku(b.sku));
+});
   if (!aisleProducts.length) {
     return sendJson(res, 404, {
       error: `No hay productos con ubicación guardada en el Pasillo ${aisle}.`,
