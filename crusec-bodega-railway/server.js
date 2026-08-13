@@ -273,6 +273,47 @@ async function syncRelbaseProducts() {
   return writeProductCache(products);
 }
 
+function upsertProductCache(product) {
+  const normalizedSku = normalizeSku(product?.sku);
+  if (!normalizedSku) return readProductCache();
+
+  const cache = readProductCache();
+  const products = Array.isArray(cache.products) ? cache.products.slice() : [];
+
+  const index = products.findIndex((item) =>
+    normalizeSku(item.sku) === normalizedSku ||
+    normalizeSku(item.barcode) === normalizedSku
+  );
+
+  const cleanProduct = {
+    ...product,
+    sku: normalizedSku,
+    cachedAt: new Date().toISOString(),
+  };
+
+  if (index >= 0) {
+    products[index] = {
+      ...products[index],
+      ...cleanProduct,
+    };
+  } else {
+    products.push(cleanProduct);
+  }
+
+  const payload = {
+    lastSyncAt: cache.lastSyncAt || null,
+    lastSingleLookupAt: new Date().toISOString(),
+    count: products.length,
+    products,
+  };
+
+  const tmp = `${PRODUCT_CACHE_FILE}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(payload, null, 2));
+  fs.renameSync(tmp, PRODUCT_CACHE_FILE);
+
+  return payload;
+}
+
 async function getCatalog(options = {}) {
   const allowLiveFetch = Boolean(options.allowLiveFetch);
 
@@ -577,7 +618,77 @@ async function productSnapshot() {
   const [catalog, locations] = await Promise.all([getCatalog(), Promise.resolve(readLocations())]);
   return catalog.map((p) => mergeLocation(p, locations));
 }
+async function findProductForSearch(sku) {
+  const normalizedSku = normalizeSku(sku);
+  const locations = readLocations();
 
+  if (CATALOG_MODE !== 'relbase') {
+    const catalog = await getCatalog();
+
+    const product = catalog.find((p) =>
+      normalizeSku(p.sku) === normalizedSku ||
+      normalizeSku(p.barcode) === normalizedSku
+    );
+
+    return {
+      product: product ? mergeLocation(product, locations) : null,
+      source: 'demo',
+      relbaseError: null,
+    };
+  }
+
+  const cache = readProductCache();
+
+  const cachedProduct = cache.products.find((p) =>
+    normalizeSku(p.sku) === normalizedSku ||
+    normalizeSku(p.barcode) === normalizedSku
+  );
+
+  /*
+   * Primero caché:
+   * así no gastamos solicitudes de Relbase si el producto ya está guardado.
+   */
+  if (cachedProduct) {
+    return {
+      product: mergeLocation(cachedProduct, locations),
+      source: 'cache',
+      relbaseError: null,
+    };
+  }
+
+  /*
+   * Si no está en caché,
+   * recién ahí hacemos una consulta puntual a Relbase.
+   */
+  try {
+    const relbase = require('./src/relbase');
+    const liveProduct = await relbase.findProductBySku(normalizedSku);
+
+    if (!liveProduct) {
+      return {
+        product: null,
+        source: 'relbase-live',
+        relbaseError: null,
+      };
+    }
+
+    upsertProductCache(liveProduct);
+
+    return {
+      product: mergeLocation(liveProduct, locations),
+      source: 'relbase-live',
+      relbaseError: null,
+    };
+  } catch (error) {
+    console.error('Error buscando SKU puntual en Relbase:', error);
+
+    return {
+      product: null,
+      source: 'cache-fallback',
+      relbaseError: error.message || 'Relbase no respondió.',
+    };
+  }
+}
 function getSyncStatusText(cache, relbaseStatus) {
   if (CATALOG_MODE !== 'relbase') return 'Modo demo: Relbase pendiente de conectar';
   if (!relbaseStatus?.authorized) return 'Relbase pendiente de autorización';
@@ -630,19 +741,34 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/products/search') {
-    const sku = normalizeSku(url.searchParams.get('sku'));
-    if (!sku) return sendJson(res, 400, { error: 'Debes ingresar un SKU o código de barras.' });
+  const sku = normalizeSku(url.searchParams.get('sku'));
+  if (!sku) return sendJson(res, 400, { error: 'Debes ingresar un SKU o código de barras.' });
 
-    const products = await productSnapshot();
-    if (CATALOG_MODE === 'relbase' && !products.length) {
-      return sendJson(res, 409, { error: 'Aún no hay productos sincronizados. Presiona "Sincronizar con Relbase" primero.' });
+  const result = await findProductForSearch(sku);
+  const cache = CATALOG_MODE === 'relbase'
+    ? readProductCache()
+    : { lastSyncAt: null };
+
+  if (!result.product) {
+    if (result.relbaseError) {
+      return sendJson(res, 502, {
+        error: `No está en caché y Relbase no respondió: ${result.relbaseError}`,
+        lastSyncAt: cache.lastSyncAt,
+      });
     }
 
-    const product = products.find((p) => normalizeSku(p.sku) === sku || normalizeSku(p.barcode) === sku);
-    if (!product) return sendJson(res, 404, { error: 'Código de producto no registrado.' });
-
-    return sendJson(res, 200, { product: publicProduct(product), lastSyncAt: CATALOG_MODE === 'relbase' ? readProductCache().lastSyncAt : null });
+    return sendJson(res, 404, {
+      error: 'Código de producto no registrado.',
+      lastSyncAt: cache.lastSyncAt,
+    });
   }
+
+  return sendJson(res, 200, {
+    product: publicProduct(result.product),
+    lastSyncAt: cache.lastSyncAt,
+    source: result.source,
+  });
+}
 
   if (req.method === 'GET' && url.pathname === '/api/products') {
     const filter = String(url.searchParams.get('filter') || 'all');
