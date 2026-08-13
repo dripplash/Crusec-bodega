@@ -713,11 +713,21 @@ function exportTypeLabel(type) {
   return 'Inventario';
 }
 
+function recorridoBodega(product) {
+  const side = String(product.location?.side || '').toUpperCase();
+  const sideLabel = side === 'I' ? 'I' : side === 'D' ? 'D' : '';
+  const rack = String(product.location?.rack || '').padStart(2, '0');
+  const level = String(product.location?.level || '').padStart(2, '0');
+
+  return `${sideLabel}-${rack}-${level}`;
+}
+
 function buildAisleExportRows(products, type) {
   if (type === 'full') {
     return [
-      ['SKU', 'Nombre', 'Pasillo', 'Lado', 'Rack', 'Nivel', 'Stock Relbase'],
+      ['Orden recorrido', 'SKU', 'Nombre', 'Pasillo', 'Lado', 'Rack', 'Nivel', 'Stock Relbase'],
       ...products.map((product) => [
+        recorridoBodega(product),
         safeExcelValue(product.sku),
         safeExcelValue(product.name),
         safeExcelValue(product.location?.aisle),
@@ -731,22 +741,30 @@ function buildAisleExportRows(products, type) {
 
   if (type === 'simple') {
     return [
-      ['SKU', 'Nombre', 'Pasillo'],
+      ['Orden recorrido', 'SKU', 'Nombre', 'Pasillo', 'Lado', 'Rack', 'Nivel'],
       ...products.map((product) => [
+        recorridoBodega(product),
         safeExcelValue(product.sku),
         safeExcelValue(product.name),
         safeExcelValue(product.location?.aisle),
+        safeExcelValue(product.location?.sideLabel),
+        safeExcelValue(product.location?.rack),
+        safeExcelValue(product.location?.level),
       ]),
     ];
   }
 
   if (type === 'notes') {
     return [
-      ['SKU', 'Nombre', 'Pasillo', 'Acción sugerida', 'Observación'],
+      ['Orden recorrido', 'SKU', 'Nombre', 'Pasillo', 'Lado', 'Rack', 'Nivel', 'Acción sugerida', 'Observación'],
       ...products.map((product) => [
+        recorridoBodega(product),
         safeExcelValue(product.sku),
         safeExcelValue(product.name),
         safeExcelValue(product.location?.aisle),
+        safeExcelValue(product.location?.sideLabel),
+        safeExcelValue(product.location?.rack),
+        safeExcelValue(product.location?.level),
         '',
         '',
       ]),
@@ -761,14 +779,16 @@ function workbookBufferFromRows(rows, sheetName = 'Inventario') {
   const worksheet = XLSX.utils.aoa_to_sheet(rows);
 
   worksheet['!cols'] = [
-    { wch: 18 },
-    { wch: 55 },
-    { wch: 12 },
-    { wch: 18 },
-    { wch: 12 },
-    { wch: 12 },
-    { wch: 16 },
-  ];
+  { wch: 18 },
+  { wch: 18 },
+  { wch: 55 },
+  { wch: 12 },
+  { wch: 18 },
+  { wch: 12 },
+  { wch: 12 },
+  { wch: 16 },
+  { wch: 18 },
+];
 
   XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
 
