@@ -369,6 +369,50 @@ async function openSearchedProductEditor() {
 
   selectProduct(product);
 }
+function downloadBlob(filename, blob) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function getFilenameFromDisposition(disposition, fallback) {
+  const match = String(disposition || '').match(/filename="?([^"]+)"?/i);
+  return match?.[1] || fallback;
+}
+
+async function downloadAisleExcel(type) {
+  const aisle = Number($('#export-aisle-select')?.value || 0);
+  const message = $('#admin-message');
+
+  if (!aisle) {
+    showMessage(message, 'Debes elegir un pasillo.', 'error');
+    return;
+  }
+
+  const response = await fetch(`/api/exports/aisle?aisle=${encodeURIComponent(aisle)}&type=${encodeURIComponent(type)}`);
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error || 'No se pudo generar el Excel.');
+  }
+
+  const blob = await response.blob();
+  const fallbackName = `Pasillo_${aisle}_Inventario.xlsx`;
+  const filename = getFilenameFromDisposition(
+    response.headers.get('Content-Disposition'),
+    fallbackName
+  );
+
+  downloadBlob(filename, blob);
+  showMessage(message, `Excel generado para Pasillo ${aisle}.`, 'success');
+}
 
 async function loadProducts() {
   const filter = $('#admin-filter').value;
