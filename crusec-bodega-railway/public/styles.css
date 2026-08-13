@@ -1280,3 +1280,44 @@ body {
   }
 
 }
+.export-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 18px;
+  align-items: end;
+  margin-bottom: 18px;
+  padding: 22px;
+}
+
+.export-card h3 {
+  margin: 7px 0;
+  font-size: 1.25rem;
+}
+
+.export-controls {
+  display: grid;
+  gap: 12px;
+  min-width: min(100%, 620px);
+}
+
+.export-controls label span {
+  display: block;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.export-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+@media (max-width: 860px) {
+  .export-card {
+    grid-template-columns: 1fr;
+  }
+
+  .export-buttons {
+    display: grid;
+  }
+}
