@@ -1315,29 +1315,13 @@ function setupEvents() {
   $('#sync-button').addEventListener('click', syncRelbase);
   $('#delete-location-button').addEventListener('click', deleteLocation);
 
-  $('#export-full-button')?.addEventListener('click', async () => {
-    try {
-      await downloadAisleExcel('full');
-    } catch (error) {
-      showMessage($('#admin-message'), error.message, 'error');
-    }
-  });
-
-  $('#export-simple-button')?.addEventListener('click', async () => {
-    try {
-      await downloadAisleExcel('simple');
-    } catch (error) {
-      showMessage($('#admin-message'), error.message, 'error');
-    }
-  });
-
-  $('#export-notes-button')?.addEventListener('click', async () => {
-    try {
-      await downloadAisleExcel('notes');
-    } catch (error) {
-      showMessage($('#admin-message'), error.message, 'error');
-    }
-  });
+  $('#export-final-button')?.addEventListener('click', async () => {
+  try {
+    await downloadAisleExcel('final');
+  } catch (error) {
+    showMessage($('#admin-message'), error.message, 'error');
+  }
+});
 
   $('#special-search-form').addEventListener('submit', (event) => {
     event.preventDefault();
