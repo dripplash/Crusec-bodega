@@ -707,87 +707,56 @@ function safeExcelValue(value) {
 }
 
 function exportTypeLabel(type) {
-  if (type === 'full') return 'Ubicacion_Completa';
-  if (type === 'simple') return 'Lista_Simple';
-  if (type === 'notes') return 'Observaciones';
+  if (type === 'final') return 'Excel_Final';
   return 'Inventario';
 }
 
-function recorridoBodega(product) {
-  const side = String(product.location?.side || '').toUpperCase();
-  const sideLabel = side === 'I' ? 'I' : side === 'D' ? 'D' : '';
-  const rack = String(product.location?.rack || '').padStart(2, '0');
-  const level = String(product.location?.level || '').padStart(2, '0');
-
-  return `${sideLabel}-${rack}-${level}`;
-}
-
 function buildAisleExportRows(products, type) {
-  if (type === 'full') {
-    return [
-      ['Orden recorrido', 'SKU', 'Nombre', 'Pasillo', 'Lado', 'Rack', 'Nivel', 'Stock Relbase'],
-      ...products.map((product) => [
-        recorridoBodega(product),
-        safeExcelValue(product.sku),
-        safeExcelValue(product.name),
-        safeExcelValue(product.location?.aisle),
-        safeExcelValue(product.location?.sideLabel),
-        safeExcelValue(product.location?.rack),
-        safeExcelValue(product.location?.level),
-        safeExcelValue(product.stock),
-      ]),
-    ];
-  }
+  if (type !== 'final') return null;
 
-  if (type === 'simple') {
-    return [
-      ['Orden recorrido', 'SKU', 'Nombre', 'Pasillo', 'Lado', 'Rack', 'Nivel'],
-      ...products.map((product) => [
-        recorridoBodega(product),
-        safeExcelValue(product.sku),
-        safeExcelValue(product.name),
-        safeExcelValue(product.location?.aisle),
-        safeExcelValue(product.location?.sideLabel),
-        safeExcelValue(product.location?.rack),
-        safeExcelValue(product.location?.level),
-      ]),
-    ];
-  }
+  return [
+    [
+      'SKU',
+      'Nombre',
+      'Pasillo',
+      'Lado',
+      'Rack',
+      'Nivel',
+      'Stock Relbase',
+      'Pedir',
+      'No Pedir',
+      'Bajar Precio',
+    ],
 
-  if (type === 'notes') {
-    return [
-      ['Orden recorrido', 'SKU', 'Nombre', 'Pasillo', 'Lado', 'Rack', 'Nivel', 'Acción sugerida', 'Observación'],
-      ...products.map((product) => [
-        recorridoBodega(product),
-        safeExcelValue(product.sku),
-        safeExcelValue(product.name),
-        safeExcelValue(product.location?.aisle),
-        safeExcelValue(product.location?.sideLabel),
-        safeExcelValue(product.location?.rack),
-        safeExcelValue(product.location?.level),
-        '',
-        '',
-      ]),
-    ];
-  }
-
-  return null;
+    ...products.map((product) => [
+      safeExcelValue(product.sku),
+      safeExcelValue(product.name),
+      safeExcelValue(product.location?.aisle),
+      safeExcelValue(product.location?.sideLabel),
+      safeExcelValue(product.location?.rack),
+      safeExcelValue(product.location?.level),
+      safeExcelValue(product.stock),
+      '',
+      '',
+      '',
+    ]),
+  ];
 }
-
 function workbookBufferFromRows(rows, sheetName = 'Inventario') {
   const workbook = XLSX.utils.book_new();
   const worksheet = XLSX.utils.aoa_to_sheet(rows);
 
   worksheet['!cols'] = [
-  { wch: 18 },
-  { wch: 18 },
-  { wch: 55 },
-  { wch: 12 },
-  { wch: 18 },
-  { wch: 12 },
-  { wch: 12 },
-  { wch: 16 },
-  { wch: 18 },
+  { wch: 18 }, // SKU
+  { wch: 55 }, // Nombre
+  { wch: 10 }, // Pasillo
+  { wch: 14 }, // Lado
+  { wch: 10 }, // Rack
+  { wch: 10 }, // Nivel
+  { wch: 16 }, // Stock Relbase
+  { wch: 12 }, // Pedir
+  { wch: 12 }, // No Pedir
+  { wch: 15 }, // Bajar Precio
 ];
 
   XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
@@ -865,11 +834,11 @@ async function handleApi(req, res, url) {
       });
     }
 
-    if (!['full', 'simple', 'notes'].includes(type)) {
-      return sendJson(res, 400, {
-        error: 'Tipo de Excel no válido.',
-      });
-    }
+    if (type !== 'final') {
+  return sendJson(res, 400, {
+    error: 'Tipo de Excel no válido.',
+  });
+}
 
     return sendAisleExport(res, aisle, type);
   }
