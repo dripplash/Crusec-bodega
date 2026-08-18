@@ -244,71 +244,6 @@ function stockValueFromItem(item) {
     item.available,
     item.available_quantity,
     item.availableQuantity,
-    item.stock,
-    item.stock_total,
-    item.stockTotal,
-    item.cantidad,
-    item.quantity,
-    item.qty,
-    item.saldo,
-    item.balance,
-    item.on_hand,
-    item.onHand
-  ));
-}
-
-function warehouseText(item) {
-  return cleanText(firstValue(
-    item.bodega_nombre,
-    item.bodegaNombre,
-    item.warehouse_name,
-    item.warehouseName,
-    item.almacen_nombre,
-    item.almacenNombre,
-    item.nombre_bodega,
-    item.nombreBodega,
-    item.ubicacion,
-    item.location,
-    nestedName(item.bodega),
-    nestedName(item.warehouse),
-    nestedName(item.almacen),
-    nestedName(item.store),
-    nestedName(item.location)
-  )).toLowerCase();
-}
-
-function isMainWarehouseItem(item) {
-  const text = warehouseText(item);
-
-  if (!text) return false;
-
-  return (
-    text.includes('bodega principal') ||
-    text.includes('casa matriz')
-  );
-}
-
-function stockFromMainWarehouseArray(items) {
-  if (!Array.isArray(items)) return null;
-
-  for (const item of items) {
-    if (!isMainWarehouseItem(item)) continue;
-
-    const qty = stockValueFromItem(item);
-    if (qty !== null) return qty;
-  }
-
-  return null;
-}
-
-function stockValueFromItem(item) {
-  return numberOrNull(firstValue(
-    item.stock_disponible,
-    item.stockDisponible,
-    item.disponible,
-    item.available,
-    item.available_quantity,
-    item.availableQuantity,
     item.stock_available,
     item.stockAvailable,
     item.stock,
@@ -339,7 +274,8 @@ function warehouseText(item) {
     nestedName(item.bodega),
     nestedName(item.warehouse),
     nestedName(item.almacen),
-    nestedName(item.store)
+    nestedName(item.store),
+    nestedName(item.location)
   )).toLowerCase();
 }
 
@@ -387,10 +323,6 @@ function sumStockArray(items) {
 }
 
 function detectStock(product) {
-  /*
-   * Primero buscamos stock por Bodega principal,
-   * que es lo que tú estás viendo en Relbase.
-   */
   const mainWarehouseStock =
     stockFromMainWarehouseArray(product.inventarios) ??
     stockFromMainWarehouseArray(product.inventory) ??
@@ -403,9 +335,6 @@ function detectStock(product) {
 
   if (mainWarehouseStock !== null) return mainWarehouseStock;
 
-  /*
-   * Después usamos stock disponible directo.
-   */
   const availableDirect = numberOrNull(firstValue(
     product.stock_disponible,
     product.stockDisponible,
@@ -419,10 +348,6 @@ function detectStock(product) {
 
   if (availableDirect !== null) return availableDirect;
 
-  /*
-   * Último recurso: stock general.
-   * Este puede ser stock total, por eso va al final.
-   */
   const direct = numberOrNull(firstValue(
     product.stock,
     product.stock_total,

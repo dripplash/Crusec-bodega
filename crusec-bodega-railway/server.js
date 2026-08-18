@@ -538,7 +538,8 @@ function publicProduct(product) {
     brand: product.brand || brandFromCode(product.sku),
     active: product.active !== false,
     stock: product.stock ?? null,
-    stockUpdatedAt: product.stockUpdatedAt || null,
+    updatedAt: product.updatedAt || product.stockUpdatedAt || null,
+    stockUpdatedAt: product.stockUpdatedAt || product.updatedAt || null,
     location: product.location || null,
     locationUpdatedAt: product.locationUpdatedAt || null,
     locationUpdatedBy: product.locationUpdatedBy || null,
@@ -1039,8 +1040,15 @@ async function handleApi(req, res, url) {
     });
   }
 
+  const publicResult = publicProduct(result.product);
+  const syncedAt = cache.lastSyncAt || publicResult.stockUpdatedAt || publicResult.updatedAt || null;
+
   return sendJson(res, 200, {
-    product: publicProduct(result.product),
+    product: {
+      ...publicResult,
+      updatedAt: syncedAt,
+      stockUpdatedAt: syncedAt,
+    },
     lastSyncAt: cache.lastSyncAt,
     source: result.source,
   });

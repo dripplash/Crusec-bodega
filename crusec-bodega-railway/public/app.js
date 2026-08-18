@@ -234,7 +234,12 @@ async function searchProduct(searchText) {
   $('#search-result').classList.add('hidden');
 
   try {
-    const { product } = await api(`/api/products/search?sku=${encodeURIComponent(searchText)}`);
+    const payload = await api(`/api/products/search?sku=${encodeURIComponent(searchText)}`);
+    const product = {
+      ...payload.product,
+      stockUpdatedAt: payload.product?.stockUpdatedAt || payload.lastSyncAt || null,
+      updatedAt: payload.product?.updatedAt || payload.lastSyncAt || null,
+    };
 
     state.searchedProduct = product;
     renderSearchResult(product);
@@ -320,8 +325,10 @@ function renderSearchResult(product) {
   $('#result-brand').textContent = `Marca: ${product.brand || brandFromCode(product.sku)}`;
   $('#result-stock').textContent = product.stock === null || product.stock === undefined ? '—' : `${product.stock}`;
 
-  $('#result-stock-time').textContent = product.stockUpdatedAt
-    ? `Actualizado: ${formatDate(product.stockUpdatedAt)}`
+  const stockDate = product.stockUpdatedAt || product.updatedAt || null;
+
+  $('#result-stock-time').textContent = stockDate
+    ? `Actualizado: ${formatDate(stockDate)}`
     : 'Stock no informado por Relbase';
 
   const panel = $('#location-panel');
