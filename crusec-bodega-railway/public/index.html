@@ -81,9 +81,20 @@
 
         <div class="toolbar-actions">
           <button id="sync-button" class="secondary-button">Sincronizar con Relbase</button>
+          <div id="sync-progress-card" class="sync-progress-card hidden">
+  <div class="sync-progress-circle">
+    <span id="sync-progress-percent">0%</span>
+  </div>
+
+  <div>
+    <strong id="sync-progress-title">Sincronizando Relbase</strong>
+    <p id="sync-progress-detail">Preparando sincronización...</p>
+  </div>
+</div>
         </div>
       </div>
       <div class="section-card export-card">
+        
   <div>
     <p class="eyebrow">INVENTARIO</p>
     <h3>Exportar productos por pasillo</h3>
