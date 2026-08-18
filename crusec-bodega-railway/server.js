@@ -56,6 +56,10 @@ const DEMO_PRODUCTS_FILE = path.join(PROJECT_DATA_DIR, 'demo-products.json');
 
 const CATALOG_MODE = String(process.env.CATALOG_MODE || 'demo').toLowerCase();
 const SYNC_INTERVAL_MINUTES = Math.max(1, Number(process.env.SYNC_INTERVAL_MINUTES || 10));
+const AUTO_SYNC_ENABLED = String(process.env.AUTO_SYNC_ENABLED || 'true').toLowerCase() !== 'false';
+const AUTO_SYNC_ON_START = String(process.env.AUTO_SYNC_ON_START || 'true').toLowerCase() !== 'false';
+let relbaseSyncRunning = false;
+let lastRelbaseAutoSyncError = null;
 const MAX_SECOND_FLOOR_POSITION = Math.max(1, Number(process.env.MAX_SECOND_FLOOR_POSITION || 20));
 const ADMIN_PIN = String(process.env.ADMIN_PIN || '1234');
 const HISTORY_LIMIT = Math.max(100, Number(process.env.HISTORY_LIMIT || 2000));
@@ -270,8 +274,72 @@ function writeProductCache(products) {
 async function syncRelbaseProducts() {
   const relbase = require('./src/relbase');
   const products = await relbase.listProducts();
-
   return writeProductCache(products);
+}
+
+async function runRelbaseSync(reason = 'manual') {
+  if (relbaseSyncRunning) {
+    console.log(`Sincronización Relbase omitida (${reason}): ya hay una sincronización en curso.`);
+
+    return {
+      skipped: true,
+      reason: 'sync_running',
+    };
+  }
+
+  relbaseSyncRunning = true;
+
+  try {
+    console.log(`Iniciando sincronización Relbase (${reason})...`);
+
+    const synced = await syncRelbaseProducts();
+
+    lastRelbaseAutoSyncError = null;
+
+    console.log(
+      `Sincronización Relbase (${reason}) completada: ${synced.products.length} productos.`
+    );
+
+    return synced;
+  } catch (error) {
+    lastRelbaseAutoSyncError = {
+      message: error.message || 'No se pudo sincronizar Relbase.',
+      at: new Date().toISOString(),
+      reason,
+    };
+
+    console.error(`Error sincronizando Relbase (${reason}):`, error);
+
+    throw error;
+  } finally {
+    relbaseSyncRunning = false;
+  }
+}
+
+function startRelbaseAutoSync() {
+  if (CATALOG_MODE !== 'relbase') {
+    console.log('Sincronización automática Relbase desactivada: CATALOG_MODE no es relbase.');
+    return;
+  }
+
+  if (!AUTO_SYNC_ENABLED) {
+    console.log('Sincronización automática Relbase desactivada por AUTO_SYNC_ENABLED=false.');
+    return;
+  }
+
+  const intervalMs = SYNC_INTERVAL_MINUTES * 60 * 1000;
+
+  console.log(`Sincronización automática Relbase activa cada ${SYNC_INTERVAL_MINUTES} minutos.`);
+
+  if (AUTO_SYNC_ON_START) {
+    setTimeout(() => {
+      runRelbaseSync('automatica_inicio').catch(() => {});
+    }, 30 * 1000);
+  }
+
+  setInterval(() => {
+    runRelbaseSync('automatica_intervalo').catch(() => {});
+  }, intervalMs);
 }
 
 function upsertProductCache(product) {
@@ -870,6 +938,10 @@ async function handleApi(req, res, url) {
       syncStatus: getSyncStatusText(cache, relbaseStatus),
       productCount,
       syncIntervalMinutes: SYNC_INTERVAL_MINUTES,
+      autoSyncEnabled: AUTO_SYNC_ENABLED,
+      autoSyncOnStart: AUTO_SYNC_ON_START,
+      relbaseSyncRunning,
+      lastRelbaseAutoSyncError,
       storage: DATA_DIR,
       cacheFile: CATALOG_MODE === 'relbase' ? PRODUCT_CACHE_FILE : null,
       maxSecondFloorPosition: MAX_SECOND_FLOOR_POSITION,
@@ -1102,12 +1174,23 @@ async function handleApi(req, res, url) {
     }
 
     try {
-      const synced = await syncRelbaseProducts();
-      return sendJson(res, 200, {
-        message: `Sincronización completada. ${synced.products.length} productos guardados.`,
-        productCount: synced.products.length,
-        lastSyncAt: synced.lastSyncAt,
-      });
+      const synced = await runRelbaseSync('manual');
+
+if (synced.skipped) {
+  const cache = readProductCache();
+
+  return sendJson(res, 409, {
+    error: 'Ya hay una sincronización de Relbase en curso. Espera unos minutos y vuelve a intentar.',
+    productCount: cache.products.length,
+    lastSyncAt: cache.lastSyncAt,
+  });
+}
+
+return sendJson(res, 200, {
+  message: `Sincronización completada. ${synced.products.length} productos guardados.`,
+  productCount: synced.products.length,
+  lastSyncAt: synced.lastSyncAt,
+});
     } catch (error) {
       console.error('Error sincronizando Relbase:', error);
       const cache = readProductCache();
@@ -1167,4 +1250,6 @@ server.listen(PORT, HOST, () => {
   console.log(`Crusec Bodega disponible en http://localhost:${PORT}`);
   console.log(`Catálogo: ${CATALOG_MODE}. Ubicaciones: ${LOCATIONS_FILE}`);
   console.log(`Caché productos: ${PRODUCT_CACHE_FILE}`);
+
+  startRelbaseAutoSync();
 });
