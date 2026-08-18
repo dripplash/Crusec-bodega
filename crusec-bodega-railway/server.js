@@ -60,6 +60,18 @@ const AUTO_SYNC_ENABLED = String(process.env.AUTO_SYNC_ENABLED || 'true').toLowe
 const AUTO_SYNC_ON_START = String(process.env.AUTO_SYNC_ON_START || 'true').toLowerCase() !== 'false';
 let relbaseSyncRunning = false;
 let lastRelbaseAutoSyncError = null;
+
+let relbaseSyncProgress = {
+  running: false,
+  percent: 0,
+  page: 0,
+  totalPages: null,
+  productCount: 0,
+  reason: null,
+  startedAt: null,
+  finishedAt: null,
+  error: null,
+};
 const MAX_SECOND_FLOOR_POSITION = Math.max(1, Number(process.env.MAX_SECOND_FLOOR_POSITION || 20));
 const ADMIN_PIN = String(process.env.ADMIN_PIN || '1234');
 const HISTORY_LIMIT = Math.max(100, Number(process.env.HISTORY_LIMIT || 2000));
@@ -271,9 +283,24 @@ function writeProductCache(products) {
   return payload;
 }
 
-async function syncRelbaseProducts() {
+async function syncRelbaseProducts(reason = 'manual') {
   const relbase = require('./src/relbase');
-  const products = await relbase.listProducts();
+
+  const products = await relbase.listProducts({
+    onProgress(progress) {
+      relbaseSyncProgress = {
+        ...relbaseSyncProgress,
+        running: true,
+        reason,
+        page: progress.page || 0,
+        totalPages: progress.totalPages || null,
+        productCount: progress.productCount || 0,
+        percent: progress.percent || relbaseSyncProgress.percent || 1,
+        error: null,
+      };
+    },
+  });
+
   return writeProductCache(products);
 }
 
@@ -289,12 +316,33 @@ async function runRelbaseSync(reason = 'manual') {
 
   relbaseSyncRunning = true;
 
+  relbaseSyncProgress = {
+    running: true,
+    percent: 1,
+    page: 0,
+    totalPages: null,
+    productCount: 0,
+    reason,
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    error: null,
+  };
+
   try {
     console.log(`Iniciando sincronización Relbase (${reason})...`);
 
-    const synced = await syncRelbaseProducts();
+    const synced = await syncRelbaseProducts(reason);
 
     lastRelbaseAutoSyncError = null;
+
+    relbaseSyncProgress = {
+      ...relbaseSyncProgress,
+      running: false,
+      percent: 100,
+      productCount: synced.products.length,
+      finishedAt: new Date().toISOString(),
+      error: null,
+    };
 
     console.log(
       `Sincronización Relbase (${reason}) completada: ${synced.products.length} productos.`
@@ -308,6 +356,13 @@ async function runRelbaseSync(reason = 'manual') {
       reason,
     };
 
+    relbaseSyncProgress = {
+      ...relbaseSyncProgress,
+      running: false,
+      error: error.message || 'No se pudo sincronizar Relbase.',
+      finishedAt: new Date().toISOString(),
+    };
+
     console.error(`Error sincronizando Relbase (${reason}):`, error);
 
     throw error;
@@ -315,6 +370,8 @@ async function runRelbaseSync(reason = 'manual') {
     relbaseSyncRunning = false;
   }
 }
+
+function startRelbaseAutoSync() {
 
 function startRelbaseAutoSync() {
   if (CATALOG_MODE !== 'relbase') {
@@ -907,6 +964,12 @@ async function handleApi(req, res, url) {
     error: 'Tipo de Excel no válido.',
   });
 }
+        if (req.method === 'GET' && url.pathname === '/api/sync/progress') {
+    return sendJson(res, 200, {
+      ...relbaseSyncProgress,
+      running: relbaseSyncRunning || relbaseSyncProgress.running,
+    });
+  }
 
     return sendAisleExport(res, aisle, type);
   }
@@ -1179,10 +1242,11 @@ async function handleApi(req, res, url) {
 if (synced.skipped) {
   const cache = readProductCache();
 
-  return sendJson(res, 409, {
-    error: 'Ya hay una sincronización de Relbase en curso. Espera unos minutos y vuelve a intentar.',
+  return sendJson(res, 202, {
+    message: 'Ya hay una sincronización de Relbase en curso.',
     productCount: cache.products.length,
     lastSyncAt: cache.lastSyncAt,
+    progress: relbaseSyncProgress,
   });
 }
 
@@ -1190,6 +1254,7 @@ return sendJson(res, 200, {
   message: `Sincronización completada. ${synced.products.length} productos guardados.`,
   productCount: synced.products.length,
   lastSyncAt: synced.lastSyncAt,
+  progress: relbaseSyncProgress,
 });
     } catch (error) {
       console.error('Error sincronizando Relbase:', error);
