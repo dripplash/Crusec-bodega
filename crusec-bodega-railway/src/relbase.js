@@ -451,6 +451,19 @@ function detectStock(product) {
   );
 }
 
+function detectBrand(product) {
+  return cleanText(firstValue(
+    product.brand,
+    product.marca,
+    product.brand_name,
+    product.brandName,
+    product.marca_nombre,
+    product.marcaNombre,
+    nestedName(product.brand),
+    nestedName(product.marca)
+  ));
+}
+
 function normalizeProduct(product) {
   const sku = cleanSku(firstValue(
     product.sku,
