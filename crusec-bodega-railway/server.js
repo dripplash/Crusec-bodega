@@ -270,22 +270,52 @@ function readProductCache() {
 function writeProductCache(products) {
   ensureDataDir();
 
+  const cleanProducts = Array.isArray(products)
+    ? products.filter((product) => product && product.sku)
+    : [];
+
   const payload = {
     lastSyncAt: new Date().toISOString(),
-    count: products.length,
-    products,
+    count: cleanProducts.length,
+    products: cleanProducts,
   };
 
   const tmp = `${PRODUCT_CACHE_FILE}.tmp`;
+
+  /*
+   * Escribimos primero un archivo temporal nuevo.
+   * Cuando ese archivo ya existe completo, eliminamos/reemplazamos
+   * el caché anterior. Así cada sincronización exitosa deja un
+   * products-cache.json totalmente nuevo, sin mezclar datos viejos.
+   */
   fs.writeFileSync(tmp, JSON.stringify(payload, null, 2));
+
+  if (fs.existsSync(PRODUCT_CACHE_FILE)) {
+    fs.rmSync(PRODUCT_CACHE_FILE, { force: true });
+  }
+
   fs.renameSync(tmp, PRODUCT_CACHE_FILE);
 
   return payload;
 }
 
+function clearProductCache() {
+  ensureDataDir();
+
+  for (const file of [PRODUCT_CACHE_FILE, `${PRODUCT_CACHE_FILE}.tmp`]) {
+    if (fs.existsSync(file)) {
+      fs.rmSync(file, { force: true });
+    }
+  }
+}
+
 async function syncRelbaseProducts(reason = 'manual') {
   const relbase = require('./src/relbase');
 
+  /*
+   * Primero descargamos todos los productos.
+   * Si Relbase falla, NO borramos el caché anterior.
+   */
   const products = await relbase.listProducts({
     onProgress(progress) {
       relbaseSyncProgress = {
@@ -300,6 +330,12 @@ async function syncRelbaseProducts(reason = 'manual') {
       };
     },
   });
+
+  /*
+   * Si Relbase terminó bien, limpiamos el archivo anterior y
+   * escribimos un caché completamente nuevo.
+   */
+  clearProductCache();
 
   return writeProductCache(products);
 }
@@ -967,6 +1003,14 @@ async function handleApi(req, res, url) {
     return sendAisleExport(res, aisle, type);
   }
   
+  if (req.method === 'POST' && url.pathname === '/api/cache/clear-products') {
+    clearProductCache();
+
+    return sendJson(res, 200, {
+      message: 'Caché de productos eliminado. Sincroniza con Relbase para cargarlo nuevamente.',
+    });
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/sync/progress') {
     return sendJson(res, 200, {
       ...relbaseSyncProgress,
