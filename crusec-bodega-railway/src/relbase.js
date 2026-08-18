@@ -10,8 +10,8 @@ const RELBASE_AUTH_URL = process.env.RELBASE_AUTH_URL || `${RELBASE_BASE_URL}/oa
 const RELBASE_TOKEN_URL = process.env.RELBASE_TOKEN_URL || `${RELBASE_BASE_URL}/oauth/token`;
 const RELBASE_PRODUCTS_URL = process.env.RELBASE_PRODUCTS_URL || `${RELBASE_BASE_URL}/api/v2/productos`;
 const RELBASE_SAFETY_MAX_PAGES = Math.max(
-  500,
-  Number(process.env.RELBASE_SAFETY_MAX_PAGES || 5000)
+  1000,
+  Number(process.env.RELBASE_SAFETY_MAX_PAGES || 10000)
 );
 function ensureDataDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -301,6 +301,73 @@ function stockFromMainWarehouseArray(items) {
   return null;
 }
 
+function stockValueFromItem(item) {
+  return numberOrNull(firstValue(
+    item.stock_disponible,
+    item.stockDisponible,
+    item.disponible,
+    item.available,
+    item.available_quantity,
+    item.availableQuantity,
+    item.stock_available,
+    item.stockAvailable,
+    item.stock,
+    item.stock_total,
+    item.stockTotal,
+    item.cantidad,
+    item.quantity,
+    item.qty,
+    item.saldo,
+    item.balance,
+    item.on_hand,
+    item.onHand
+  ));
+}
+
+function warehouseText(item) {
+  return cleanText(firstValue(
+    item.bodega_nombre,
+    item.bodegaNombre,
+    item.warehouse_name,
+    item.warehouseName,
+    item.almacen_nombre,
+    item.almacenNombre,
+    item.nombre_bodega,
+    item.nombreBodega,
+    item.ubicacion,
+    item.location,
+    nestedName(item.bodega),
+    nestedName(item.warehouse),
+    nestedName(item.almacen),
+    nestedName(item.store)
+  )).toLowerCase();
+}
+
+function isMainWarehouseItem(item) {
+  const text = warehouseText(item);
+
+  if (!text) return false;
+
+  return (
+    text.includes('bodega principal') ||
+    text.includes('casa matriz') ||
+    text.includes('principal')
+  );
+}
+
+function stockFromMainWarehouseArray(items) {
+  if (!Array.isArray(items)) return null;
+
+  for (const item of items) {
+    if (!isMainWarehouseItem(item)) continue;
+
+    const qty = stockValueFromItem(item);
+    if (qty !== null) return qty;
+  }
+
+  return null;
+}
+
 function sumStockArray(items) {
   if (!Array.isArray(items)) return null;
 
@@ -321,9 +388,8 @@ function sumStockArray(items) {
 
 function detectStock(product) {
   /*
-   * Primero intentamos usar el stock disponible de la Bodega principal.
-   * Esto se acerca a lo que Relbase muestra como:
-   * [Casa matriz] Bodega principal -> Stock disponible.
+   * Primero buscamos stock por Bodega principal,
+   * que es lo que tú estás viendo en Relbase.
    */
   const mainWarehouseStock =
     stockFromMainWarehouseArray(product.inventarios) ??
@@ -338,7 +404,7 @@ function detectStock(product) {
   if (mainWarehouseStock !== null) return mainWarehouseStock;
 
   /*
-   * Si Relbase entrega stock disponible directo, usamos ese antes que stock total.
+   * Después usamos stock disponible directo.
    */
   const availableDirect = numberOrNull(firstValue(
     product.stock_disponible,
@@ -346,13 +412,16 @@ function detectStock(product) {
     product.disponible,
     product.available,
     product.available_quantity,
-    product.availableQuantity
+    product.availableQuantity,
+    product.stock_available,
+    product.stockAvailable
   ));
 
   if (availableDirect !== null) return availableDirect;
 
   /*
    * Último recurso: stock general.
+   * Este puede ser stock total, por eso va al final.
    */
   const direct = numberOrNull(firstValue(
     product.stock,
@@ -380,23 +449,6 @@ function detectStock(product) {
     sumStockArray(product.stockBodegas) ??
     null
   );
-}
-
-function detectBrand(product) {
-  return cleanText(firstValue(
-    product.marca,
-    product.brand,
-    product.marca_nombre,
-    product.marcaNombre,
-    product.brand_name,
-    product.brandName,
-    product.fabricante,
-    product.manufacturer,
-    nestedName(product.marca),
-    nestedName(product.brand),
-    nestedName(product.fabricante),
-    nestedName(product.manufacturer)
-  ));
 }
 
 function normalizeProduct(product) {
