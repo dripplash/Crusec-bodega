@@ -318,10 +318,11 @@ function sumStockArray(items) {
 
   return found ? total : null;
 }
+
 function detectStock(product) {
   /*
-   * Primero intentamos usar el stock de la Bodega principal.
-   * Esto es lo más parecido a lo que ves en Relbase:
+   * Primero intentamos usar el stock disponible de la Bodega principal.
+   * Esto se acerca a lo que Relbase muestra como:
    * [Casa matriz] Bodega principal -> Stock disponible.
    */
   const mainWarehouseStock =
@@ -337,8 +338,7 @@ function detectStock(product) {
   if (mainWarehouseStock !== null) return mainWarehouseStock;
 
   /*
-   * Si Relbase entrega stock disponible directo,
-   * usamos ese antes que stock total.
+   * Si Relbase entrega stock disponible directo, usamos ese antes que stock total.
    */
   const availableDirect = numberOrNull(firstValue(
     product.stock_disponible,
@@ -353,7 +353,6 @@ function detectStock(product) {
 
   /*
    * Último recurso: stock general.
-   * Este puede ser stock total, por eso va después.
    */
   const direct = numberOrNull(firstValue(
     product.stock,
@@ -594,13 +593,18 @@ function nextPageUrl(payload, currentUrl) {
   return url.toString();
 }
 
-async function listProducts() {
+async function listProducts(options = {}) {
+  const onProgress = typeof options.onProgress === 'function'
+    ? options.onProgress
+    : null;
+
   let accessToken = await getValidAccessToken();
 
   let url = RELBASE_PRODUCTS_URL;
   const all = [];
   const seenUrls = new Set();
   let pageCount = 0;
+  let knownTotalPages = null;
 
   while (url) {
     pageCount += 1;
@@ -613,7 +617,7 @@ async function listProducts() {
 
     if (seenUrls.has(url)) {
       throw new Error(
-        `Relbase repitió una página durante la sincronización. Se detuvo para evitar un ciclo infinito.`
+        'Relbase repitió una página durante la sincronización. Se detuvo para evitar un ciclo infinito.'
       );
     }
 
@@ -638,6 +642,36 @@ async function listProducts() {
     const products = extractProducts(payload);
     all.push(...products);
 
+    const meta = payload?.meta || payload?.pagination || {};
+    const totalPages = numberOrNull(firstValue(
+      meta.total_pages,
+      meta.totalPages,
+      meta.pages,
+      meta.last_page,
+      meta.lastPage
+    ));
+
+    if (totalPages !== null) {
+      knownTotalPages = totalPages;
+    }
+
+    let percent = 1;
+
+    if (knownTotalPages) {
+      percent = Math.min(99, Math.round((pageCount / knownTotalPages) * 100));
+    } else {
+      percent = Math.min(95, Math.max(1, Math.round(pageCount * 2)));
+    }
+
+    if (onProgress) {
+      onProgress({
+        page: pageCount,
+        totalPages: knownTotalPages,
+        productCount: all.length,
+        percent,
+      });
+    }
+
     console.log(
       `Relbase página ${pageCount}: ${products.length} productos. Total acumulado: ${all.length}`
     );
@@ -656,6 +690,15 @@ async function listProducts() {
   }
 
   console.log(`Sincronización Relbase terminada: ${unique.size} productos únicos.`);
+
+  if (onProgress) {
+    onProgress({
+      page: pageCount,
+      totalPages: knownTotalPages,
+      productCount: unique.size,
+      percent: 100,
+    });
+  }
 
   return [...unique.values()];
 }

@@ -372,8 +372,6 @@ async function runRelbaseSync(reason = 'manual') {
 }
 
 function startRelbaseAutoSync() {
-
-function startRelbaseAutoSync() {
   if (CATALOG_MODE !== 'relbase') {
     console.log('Sincronización automática Relbase desactivada: CATALOG_MODE no es relbase.');
     return;
@@ -964,16 +962,17 @@ async function handleApi(req, res, url) {
     error: 'Tipo de Excel no válido.',
   });
 }
-        if (req.method === 'GET' && url.pathname === '/api/sync/progress') {
+
+    return sendAisleExport(res, aisle, type);
+  }
+  
+  if (req.method === 'GET' && url.pathname === '/api/sync/progress') {
     return sendJson(res, 200, {
       ...relbaseSyncProgress,
       running: relbaseSyncRunning || relbaseSyncProgress.running,
     });
   }
 
-    return sendAisleExport(res, aisle, type);
-  }
-  
   if (req.method === 'GET' && url.pathname === '/api/status') {
     let relbaseStatus = null;
     let productCount = 0;
@@ -1005,6 +1004,7 @@ async function handleApi(req, res, url) {
       autoSyncOnStart: AUTO_SYNC_ON_START,
       relbaseSyncRunning,
       lastRelbaseAutoSyncError,
+      syncProgress: relbaseSyncProgress,
       storage: DATA_DIR,
       cacheFile: CATALOG_MODE === 'relbase' ? PRODUCT_CACHE_FILE : null,
       maxSecondFloorPosition: MAX_SECOND_FLOOR_POSITION,
@@ -1233,36 +1233,41 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'POST' && url.pathname === '/api/sync') {
     if (CATALOG_MODE !== 'relbase') {
-      return sendJson(res, 409, { error: 'Relbase todavía no está conectado. La app está funcionando con productos de demostración.' });
+      return sendJson(res, 409, {
+        error: 'Relbase todavía no está conectado. La app está funcionando con productos de demostración.',
+      });
     }
 
     try {
       const synced = await runRelbaseSync('manual');
 
-if (synced.skipped) {
-  const cache = readProductCache();
+      if (synced.skipped) {
+        const cache = readProductCache();
 
-  return sendJson(res, 202, {
-    message: 'Ya hay una sincronización de Relbase en curso.',
-    productCount: cache.products.length,
-    lastSyncAt: cache.lastSyncAt,
-    progress: relbaseSyncProgress,
-  });
-}
+        return sendJson(res, 202, {
+          message: 'Ya hay una sincronización de Relbase en curso.',
+          productCount: cache.products.length,
+          lastSyncAt: cache.lastSyncAt,
+          progress: relbaseSyncProgress,
+        });
+      }
 
-return sendJson(res, 200, {
-  message: `Sincronización completada. ${synced.products.length} productos guardados.`,
-  productCount: synced.products.length,
-  lastSyncAt: synced.lastSyncAt,
-  progress: relbaseSyncProgress,
-});
+      return sendJson(res, 200, {
+        message: `Sincronización completada. ${synced.products.length} productos guardados.`,
+        productCount: synced.products.length,
+        lastSyncAt: synced.lastSyncAt,
+        progress: relbaseSyncProgress,
+      });
     } catch (error) {
       console.error('Error sincronizando Relbase:', error);
+
       const cache = readProductCache();
+
       return sendJson(res, 502, {
         error: `${error.message || 'No se pudo sincronizar Relbase.'}${cache.products.length ? ` Se mantiene el caché anterior con ${cache.products.length} productos.` : ''}`,
         productCount: cache.products.length,
         lastSyncAt: cache.lastSyncAt,
+        progress: relbaseSyncProgress,
       });
     }
   }

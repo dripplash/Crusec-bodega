@@ -81,46 +81,48 @@
 
         <div class="toolbar-actions">
           <button id="sync-button" class="secondary-button">Sincronizar con Relbase</button>
-          <div id="sync-progress-card" class="sync-progress-card hidden">
-  <div class="sync-progress-circle">
-    <span id="sync-progress-percent">0%</span>
-  </div>
 
-  <div>
-    <strong id="sync-progress-title">Sincronizando Relbase</strong>
-    <p id="sync-progress-detail">Preparando sincronización...</p>
-  </div>
-</div>
+          <div id="sync-progress-card" class="sync-progress-card hidden">
+            <div class="sync-progress-top">
+              <strong id="sync-progress-title">Sincronizando Relbase</strong>
+              <span id="sync-progress-percent">0%</span>
+            </div>
+            <div class="sync-progress-bar">
+              <div id="sync-progress-fill" class="sync-progress-fill"></div>
+            </div>
+            <p id="sync-progress-detail">Preparando sincronización...</p>
+          </div>
         </div>
       </div>
+
       <div class="section-card export-card">
-        
-  <div>
-    <p class="eyebrow">INVENTARIO</p>
-    <h3>Exportar productos por pasillo</h3>
-    <p class="muted">
-      Elige un pasillo y descarga un archivo Excel.
-    </p>
-  </div>
+        <div>
+          <p class="eyebrow">INVENTARIO</p>
+          <h3>Exportar productos por pasillo</h3>
+          <p class="muted">Elige un pasillo y descarga un archivo Excel.</p>
+        </div>
 
-  <div class="export-controls">
-    <label>
-      <span>Pasillo</span>
-      <select id="export-aisle-select">
-        <option value="1">Pasillo 1</option>
-        <option value="2">Pasillo 2</option>
-        <option value="3">Pasillo 3</option>
-        <option value="4">Pasillo 4</option>
-        <option value="5">Pasillo 5</option>
-        <option value="6">Pasillo 6</option>
-      </select>
-    </label>
+        <div class="export-controls">
+          <label>
+            <span>Pasillo</span>
+            <select id="export-aisle-select">
+              <option value="1">Pasillo 1</option>
+              <option value="2">Pasillo 2</option>
+              <option value="3">Pasillo 3</option>
+              <option value="4">Pasillo 4</option>
+              <option value="5">Pasillo 5</option>
+              <option value="6">Pasillo 6</option>
+            </select>
+          </label>
 
-   <div class="export-buttons">
-  <button id="export-final-button" class="secondary-button" type="button">
-    Excel final
-  </button>
-</div>
+          <div class="export-buttons">
+            <button id="export-final-button" class="secondary-button" type="button">
+              Excel final
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div class="filters-card">
         <input id="admin-search" placeholder="Buscar SKU, nombre o marca" autocomplete="off" />
         <select id="admin-filter">

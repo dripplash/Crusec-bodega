@@ -839,6 +839,76 @@ function configureKeyboardFlow() {
   });
 }
 
+let syncProgressTimer = null;
+
+function updateSyncProgress(progress = {}) {
+  const card = $('#sync-progress-card');
+  const fill = $('#sync-progress-fill');
+  const percentText = $('#sync-progress-percent');
+  const detail = $('#sync-progress-detail');
+
+  if (!card || !fill || !percentText || !detail) return;
+
+  const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
+
+  card.classList.remove('hidden');
+  fill.style.width = `${percent}%`;
+  percentText.textContent = `${Math.round(percent)}%`;
+
+  const page = progress.page || 0;
+  const totalPages = progress.totalPages;
+
+  if (progress.error) {
+    detail.textContent = progress.error;
+    return;
+  }
+
+  if (progress.running) {
+    detail.textContent = totalPages
+      ? `Página ${page} de ${totalPages}. Productos: ${progress.productCount || 0}`
+      : `Página ${page}. Productos: ${progress.productCount || 0}`;
+    return;
+  }
+
+  if (percent >= 100) {
+    detail.textContent = `Sincronización completada. Productos: ${progress.productCount || 0}`;
+  } else {
+    detail.textContent = 'Preparando sincronización...';
+  }
+}
+
+function stopSyncProgressPolling() {
+  if (syncProgressTimer) {
+    clearInterval(syncProgressTimer);
+    syncProgressTimer = null;
+  }
+}
+
+function startSyncProgressPolling() {
+  stopSyncProgressPolling();
+
+  syncProgressTimer = setInterval(async () => {
+    try {
+      const response = await fetch('/api/sync/progress');
+      const progress = await response.json();
+
+      updateSyncProgress(progress);
+
+      if (!progress.running && Number(progress.percent || 0) >= 100) {
+        stopSyncProgressPolling();
+
+        await Promise.all([
+          loadProducts(),
+          loadStatus(),
+          loadSpecialBrowser().catch(() => {}),
+        ]);
+      }
+    } catch (error) {
+      stopSyncProgressPolling();
+    }
+  }, 1000);
+}
+
 async function syncRelbase() {
   const button = $('#sync-button');
   const message = $('#admin-message');
@@ -848,20 +918,50 @@ async function syncRelbase() {
   button.disabled = true;
   button.textContent = 'Sincronizando…';
 
+  updateSyncProgress({
+    running: true,
+    percent: 1,
+    page: 0,
+    productCount: 0,
+  });
+
+  startSyncProgressPolling();
+
   try {
-    const result = await api('/api/sync', {
+    const response = await fetch('/api/sync', {
       method: 'POST',
     });
 
-    showMessage(message, result.message, 'success');
+    const payload = await response.json().catch(() => ({}));
 
-    await Promise.all([
-      loadProducts(),
-      loadStatus(),
-      loadSpecialBrowser().catch(() => {}),
-    ]);
+    if (!response.ok && response.status !== 202) {
+      throw new Error(payload.error || 'No se pudo sincronizar con Relbase.');
+    }
+
+    if (payload.progress) {
+      updateSyncProgress(payload.progress);
+    }
+
+    startSyncProgressPolling();
+
+    if (payload.progress && !payload.progress.running && Number(payload.progress.percent || 0) >= 100) {
+      stopSyncProgressPolling();
+
+      showMessage(
+        message,
+        payload.message || 'Sincronización completada.',
+        'success'
+      );
+
+      await Promise.all([
+        loadProducts(),
+        loadStatus(),
+        loadSpecialBrowser().catch(() => {}),
+      ]);
+    }
   } catch (error) {
-    showMessage(message, error.message, error.status === 409 ? 'warning' : 'error');
+    stopSyncProgressPolling();
+    showMessage(message, error.message, 'error');
   } finally {
     button.disabled = false;
     button.textContent = 'Sincronizar con Relbase';
