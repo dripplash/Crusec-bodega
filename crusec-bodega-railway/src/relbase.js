@@ -236,6 +236,71 @@ function numberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function stockValueFromItem(item) {
+  return numberOrNull(firstValue(
+    item.stock_disponible,
+    item.stockDisponible,
+    item.disponible,
+    item.available,
+    item.available_quantity,
+    item.availableQuantity,
+    item.stock,
+    item.stock_total,
+    item.stockTotal,
+    item.cantidad,
+    item.quantity,
+    item.qty,
+    item.saldo,
+    item.balance,
+    item.on_hand,
+    item.onHand
+  ));
+}
+
+function warehouseText(item) {
+  return cleanText(firstValue(
+    item.bodega_nombre,
+    item.bodegaNombre,
+    item.warehouse_name,
+    item.warehouseName,
+    item.almacen_nombre,
+    item.almacenNombre,
+    item.nombre_bodega,
+    item.nombreBodega,
+    item.ubicacion,
+    item.location,
+    nestedName(item.bodega),
+    nestedName(item.warehouse),
+    nestedName(item.almacen),
+    nestedName(item.store),
+    nestedName(item.location)
+  )).toLowerCase();
+}
+
+function isMainWarehouseItem(item) {
+  const text = warehouseText(item);
+
+  if (!text) return false;
+
+  return (
+    text.includes('bodega principal') ||
+    text.includes('casa matriz')
+  );
+}
+
+function stockFromMainWarehouseArray(items) {
+  if (!Array.isArray(items)) return null;
+
+  for (const item of items) {
+    if (!isMainWarehouseItem(item)) continue;
+
+    const qty = stockValueFromItem(item);
+    if (qty !== null) return qty;
+  }
+
+  return null;
+}
+
 function sumStockArray(items) {
   if (!Array.isArray(items)) return null;
 
@@ -243,24 +308,7 @@ function sumStockArray(items) {
   let found = false;
 
   for (const item of items) {
-    const qty = numberOrNull(firstValue(
-      item.stock,
-      item.stock_total,
-      item.stockTotal,
-      item.stock_disponible,
-      item.stockDisponible,
-      item.disponible,
-      item.cantidad,
-      item.quantity,
-      item.qty,
-      item.saldo,
-      item.balance,
-      item.on_hand,
-      item.onHand,
-      item.available,
-      item.available_quantity,
-      item.availableQuantity
-    ));
+    const qty = stockValueFromItem(item);
 
     if (qty !== null) {
       total += qty;
@@ -270,25 +318,54 @@ function sumStockArray(items) {
 
   return found ? total : null;
 }
-
 function detectStock(product) {
+  /*
+   * Primero intentamos usar el stock de la Bodega principal.
+   * Esto es lo más parecido a lo que ves en Relbase:
+   * [Casa matriz] Bodega principal -> Stock disponible.
+   */
+  const mainWarehouseStock =
+    stockFromMainWarehouseArray(product.inventarios) ??
+    stockFromMainWarehouseArray(product.inventory) ??
+    stockFromMainWarehouseArray(product.inventories) ??
+    stockFromMainWarehouseArray(product.stocks) ??
+    stockFromMainWarehouseArray(product.bodegas) ??
+    stockFromMainWarehouseArray(product.warehouses) ??
+    stockFromMainWarehouseArray(product.stock_bodegas) ??
+    stockFromMainWarehouseArray(product.stockBodegas);
+
+  if (mainWarehouseStock !== null) return mainWarehouseStock;
+
+  /*
+   * Si Relbase entrega stock disponible directo,
+   * usamos ese antes que stock total.
+   */
+  const availableDirect = numberOrNull(firstValue(
+    product.stock_disponible,
+    product.stockDisponible,
+    product.disponible,
+    product.available,
+    product.available_quantity,
+    product.availableQuantity
+  ));
+
+  if (availableDirect !== null) return availableDirect;
+
+  /*
+   * Último recurso: stock general.
+   * Este puede ser stock total, por eso va después.
+   */
   const direct = numberOrNull(firstValue(
     product.stock,
     product.stock_total,
     product.stockTotal,
-    product.stock_disponible,
-    product.stockDisponible,
-    product.disponible,
     product.cantidad,
     product.quantity,
     product.qty,
     product.saldo,
     product.balance,
     product.on_hand,
-    product.onHand,
-    product.available,
-    product.available_quantity,
-    product.availableQuantity
+    product.onHand
   ));
 
   if (direct !== null) return direct;
@@ -302,7 +379,6 @@ function detectStock(product) {
     sumStockArray(product.warehouses) ??
     sumStockArray(product.stock_bodegas) ??
     sumStockArray(product.stockBodegas) ??
-    sumStockArray(product.variants) ??
     null
   );
 }
