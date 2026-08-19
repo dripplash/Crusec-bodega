@@ -891,10 +891,151 @@ async function findProductBySku(skuInput) {
 
   return null;
 }
+
+async function debugFindProductInRelbase(skuInput, options = {}) {
+  const sku = cleanSku(skuInput);
+  if (!sku) {
+    throw new Error('Falta SKU para buscar en Relbase.');
+  }
+
+  let accessToken = await getValidAccessToken();
+
+  let url = RELBASE_PRODUCTS_URL;
+  const seenUrls = new Set();
+  let pageCount = 0;
+  let knownTotalPages = null;
+  let scannedProducts = 0;
+
+  while (url) {
+    pageCount += 1;
+
+    if (pageCount > RELBASE_SAFETY_MAX_PAGES) {
+      throw new Error(
+        `Relbase superó el límite de seguridad de ${RELBASE_SAFETY_MAX_PAGES} páginas buscando ${sku}.`
+      );
+    }
+
+    if (seenUrls.has(url)) {
+      throw new Error(
+        `Relbase repitió una página buscando ${sku}. Se detuvo para evitar un ciclo infinito.`
+      );
+    }
+
+    seenUrls.add(url);
+
+    let payload;
+
+    try {
+      payload = await fetchProductsPage(url, accessToken);
+    } catch (error) {
+      if (error.status === 401) {
+        console.warn('Relbase respondió 401 en debug find. Renovando token...');
+        const refreshed = await refreshAccessToken();
+        accessToken = refreshed.access_token;
+        payload = await fetchProductsPage(url, accessToken);
+      } else {
+        error.message = `Error buscando ${sku} en página ${pageCount}: ${error.message}`;
+        throw error;
+      }
+    }
+
+    const products = extractProducts(payload);
+    scannedProducts += products.length;
+
+    const meta = payload?.meta || payload?.pagination || {};
+    const totalPages = numberOrNull(firstValue(
+      meta.total_pages,
+      meta.totalPages,
+      meta.pages,
+      meta.last_page,
+      meta.lastPage
+    ));
+
+    if (totalPages !== null) {
+      knownTotalPages = totalPages;
+    }
+
+    for (let index = 0; index < products.length; index += 1) {
+      const product = products[index];
+      const normalized = normalizeProduct(product);
+
+      const rawCodes = {
+        sku: firstValue(product.sku, product.SKU),
+        code: firstValue(product.code, product.codigo, product.codigo_sku, product.codigoSku),
+        barcode: firstValue(product.barcode, product.codigo_barras, product.codigoBarras),
+        id: product.id || null,
+        product_id_parent: product.product_id_parent || null,
+      };
+
+      const candidates = [
+        normalized.sku,
+        normalized.barcode,
+        normalized.relbaseId,
+        rawCodes.sku,
+        rawCodes.code,
+        rawCodes.barcode,
+        rawCodes.id,
+      ].map(cleanSku).filter(Boolean);
+
+      if (candidates.includes(sku)) {
+        return {
+          found: true,
+          sku,
+          page: pageCount,
+          index,
+          totalPages: knownTotalPages,
+          scannedProducts,
+          currentUrl: url,
+          rawCodes,
+          normalized,
+          inventories: product.inventories || product.inventory || product.stock_bodegas || product.stockBodegas || [],
+          rawProduct: product,
+        };
+      }
+    }
+
+    url = nextPageUrl(payload, url);
+  }
+
+  return {
+    found: false,
+    sku,
+    page: pageCount,
+    totalPages: knownTotalPages,
+    scannedProducts,
+  };
+}
+
+async function debugStockBySku(input = {}) {
+  const sku = cleanSku(input.sku);
+  if (!sku) {
+    throw new Error('Falta SKU para revisar stock.');
+  }
+
+  const found = await debugFindProductInRelbase(sku);
+
+  return {
+    sku,
+    warehouseId: RELBASE_MAIN_WAREHOUSE_ID || null,
+    found: found.found,
+    page: found.page || null,
+    scannedProducts: found.scannedProducts || 0,
+    rawCodes: found.rawCodes || null,
+    normalized: found.normalized || null,
+    inventories: found.inventories || [],
+  };
+}
+
+
 module.exports = {
   getAuthUrl,
   exchangeCodeForToken,
   listProducts,
   findProductBySku,
   status,
+  buildProductLookupUrls,
+  fetchProductsPage,
+  getValidAccessToken,
+  debugFindProductInRelbase,
+  debugStockBySku,
 };

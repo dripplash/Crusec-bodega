@@ -1076,6 +1076,56 @@ async function handleApi(req, res, url) {
     });
   }
 
+
+  if (req.method === 'GET' && url.pathname.startsWith('/api/debug/find-relbase/')) {
+    const sku = normalizeSku(decodeURIComponent(url.pathname.replace('/api/debug/find-relbase/', '')));
+
+    if (!sku) {
+      return sendJson(res, 400, { error: 'Falta SKU.' });
+    }
+
+    if (CATALOG_MODE !== 'relbase') {
+      return sendJson(res, 409, { error: 'La app no está en modo Relbase.' });
+    }
+
+    const cache = readProductCache();
+    const cachedProduct = cache.products.find((product) =>
+      normalizeSku(product.sku) === sku ||
+      normalizeSku(product.barcode) === sku ||
+      normalizeSku(product.relbaseId) === sku
+    );
+
+    try {
+      const relbase = require('./src/relbase');
+
+      if (typeof relbase.debugFindProductInRelbase !== 'function') {
+        return sendJson(res, 500, {
+          error: 'La función debugFindProductInRelbase no está disponible en src/relbase.js.',
+        });
+      }
+
+      const result = await relbase.debugFindProductInRelbase(sku);
+
+      return sendJson(res, 200, {
+        sku,
+        productInCache: cachedProduct
+          ? {
+              sku: cachedProduct.sku,
+              relbaseId: cachedProduct.relbaseId || null,
+              barcode: cachedProduct.barcode || null,
+              name: cachedProduct.name || null,
+              stock: cachedProduct.stock ?? null,
+            }
+          : null,
+        result,
+      });
+    } catch (error) {
+      return sendJson(res, 500, {
+        error: error.message || 'No se pudo buscar el producto en Relbase.',
+      });
+    }
+  }
+
   if (req.method === 'GET' && url.pathname.startsWith('/api/debug/relbase-product/')) {
     const sku = normalizeSku(decodeURIComponent(url.pathname.replace('/api/debug/relbase-product/', '')));
 
