@@ -473,6 +473,52 @@ function upsertProductCache(product) {
   return payload;
 }
 
+
+async function refreshRelbaseStockForProduct(product) {
+  if (CATALOG_MODE !== 'relbase' || !product?.sku) return product;
+
+  try {
+    const relbase = require('./src/relbase');
+    if (typeof relbase.findStockBySku !== 'function') return product;
+
+    const stockResult = await relbase.findStockBySku({
+      sku: product.sku,
+      relbaseId: product.relbaseId,
+      barcode: product.barcode,
+    });
+
+    if (!stockResult || stockResult.stock === null || stockResult.stock === undefined) {
+      return product;
+    }
+
+    const updated = {
+      ...product,
+      stock: stockResult.stock,
+      stockSource: 'relbase-stock-bodega-principal',
+      stockSourceUrl: stockResult.source || null,
+      stockUpdatedAt: stockResult.stockUpdatedAt || new Date().toISOString(),
+    };
+
+    /*
+     * Guardamos el stock exacto en caché para que la siguiente búsqueda
+     * ya muestre el valor corregido.
+     */
+    upsertProductCache(updated);
+
+    return updated;
+  } catch (error) {
+    console.warn(`No se pudo actualizar stock por bodega para ${product.sku}:`, error.message);
+    return product;
+  }
+}
+
+async function refreshRelbaseStockForSmallList(products, limit = 25) {
+  if (CATALOG_MODE !== 'relbase') return products;
+  if (!Array.isArray(products) || products.length === 0 || products.length > limit) return products;
+
+  return Promise.all(products.map((product) => refreshRelbaseStockForProduct(product)));
+}
+
 async function getCatalog(options = {}) {
   const allowLiveFetch = Boolean(options.allowLiveFetch);
 
@@ -573,6 +619,7 @@ function publicProduct(product) {
     brand: product.brand || brandFromCode(product.sku),
     active: product.active !== false,
     stock: product.stock ?? null,
+    stockSource: product.stockSource || null,
     updatedAt: product.updatedAt || product.stockUpdatedAt || null,
     stockUpdatedAt: product.stockUpdatedAt || product.updatedAt || null,
     location: product.location || null,
@@ -809,9 +856,13 @@ async function findProductForSearch(sku) {
    * así no gastamos solicitudes de Relbase si el producto ya está guardado.
    */
   if (cachedProduct) {
+    const stockUpdatedProduct = await refreshRelbaseStockForProduct(cachedProduct);
+
     return {
-      product: mergeLocation(cachedProduct, locations),
-      source: 'cache',
+      product: mergeLocation(stockUpdatedProduct, locations),
+      source: stockUpdatedProduct.stockSource === 'relbase-stock-bodega-principal'
+        ? 'cache-stock-bodega-principal'
+        : 'cache',
       relbaseError: null,
     };
   }
@@ -832,11 +883,14 @@ async function findProductForSearch(sku) {
       };
     }
 
-    upsertProductCache(liveProduct);
+    const stockUpdatedProduct = await refreshRelbaseStockForProduct(liveProduct);
+    upsertProductCache(stockUpdatedProduct);
 
     return {
-      product: mergeLocation(liveProduct, locations),
-      source: 'relbase-live',
+      product: mergeLocation(stockUpdatedProduct, locations),
+      source: stockUpdatedProduct.stockSource === 'relbase-stock-bodega-principal'
+        ? 'relbase-live-stock-bodega-principal'
+        : 'relbase-live',
       relbaseError: null,
     };
   } catch (error) {
@@ -1022,6 +1076,52 @@ async function handleApi(req, res, url) {
     });
   }
 
+  if (req.method === 'GET' && url.pathname.startsWith('/api/debug/stock/')) {
+    const sku = normalizeSku(decodeURIComponent(url.pathname.replace('/api/debug/stock/', '')));
+
+    if (!sku) {
+      return sendJson(res, 400, { error: 'Falta SKU.' });
+    }
+
+    if (CATALOG_MODE !== 'relbase') {
+      return sendJson(res, 409, { error: 'La app no está en modo Relbase.' });
+    }
+
+    const cache = readProductCache();
+    const cachedProduct = cache.products.find((product) =>
+      normalizeSku(product.sku) === sku ||
+      normalizeSku(product.barcode) === sku
+    );
+
+    try {
+      const relbase = require('./src/relbase');
+
+      if (typeof relbase.debugStockBySku !== 'function') {
+        return sendJson(res, 500, { error: 'La función debugStockBySku no está disponible.' });
+      }
+
+      const debug = await relbase.debugStockBySku({
+        sku,
+        relbaseId: cachedProduct?.relbaseId || null,
+        barcode: cachedProduct?.barcode || null,
+      });
+
+      return sendJson(res, 200, {
+        productInCache: cachedProduct
+          ? {
+              sku: cachedProduct.sku,
+              relbaseId: cachedProduct.relbaseId || null,
+              barcode: cachedProduct.barcode || null,
+              cacheStock: cachedProduct.stock ?? null,
+            }
+          : null,
+        debug,
+      });
+    } catch (error) {
+      return sendJson(res, 500, { error: error.message || 'No se pudo consultar stock Relbase.' });
+    }
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/sync/progress') {
     return sendJson(res, 200, {
       ...relbaseSyncProgress,
@@ -1135,6 +1235,11 @@ async function handleApi(req, res, url) {
       if (Boolean(a.location) !== Boolean(b.location)) return a.location ? 1 : -1;
       return normalizeSku(a.sku).localeCompare(normalizeSku(b.sku));
     });
+
+    if (q) {
+      products = await refreshRelbaseStockForSmallList(products, 25);
+      products = products.map((product) => mergeLocation(product, readLocations()));
+    }
 
     let relbaseStatus = null;
     if (CATALOG_MODE === 'relbase') {
