@@ -377,17 +377,12 @@ function sumStockArray(items) {
 }
 
 function detectStock(product) {
-  const mainWarehouseStock =
-    stockFromMainWarehouseArray(product.inventarios) ??
-    stockFromMainWarehouseArray(product.inventory) ??
-    stockFromMainWarehouseArray(product.inventories) ??
-    stockFromMainWarehouseArray(product.stocks) ??
-    stockFromMainWarehouseArray(product.bodegas) ??
-    stockFromMainWarehouseArray(product.warehouses) ??
-    stockFromMainWarehouseArray(product.stock_bodegas) ??
-    stockFromMainWarehouseArray(product.stockBodegas);
-
-  if (mainWarehouseStock !== null) return mainWarehouseStock;
+  /*
+   * IMPORTANTE:
+   * Antes la app podía terminar usando `stock` o `stock_total`, que en Relbase
+   * puede ser un stock general. Para Crusec necesitamos priorizar el stock
+   * disponible/actual, que es el que se parecía al "Stock actual" de Relbase.
+   */
 
   const availableDirect = numberOrNull(firstValue(
     product.stock_disponible,
@@ -397,10 +392,32 @@ function detectStock(product) {
     product.available_quantity,
     product.availableQuantity,
     product.stock_available,
-    product.stockAvailable
+    product.stockAvailable,
+    product.stock_actual,
+    product.stockActual,
+    product.stock_actual_disponible,
+    product.stockActualDisponible,
+    product.stock_fisico,
+    product.stockFisico,
+    product.cantidad_disponible,
+    product.cantidadDisponible
   ));
 
   if (availableDirect !== null) return availableDirect;
+
+  const mainWarehouseStock =
+    stockFromMainWarehouseArray(product.inventarios) ??
+    stockFromMainWarehouseArray(product.inventory) ??
+    stockFromMainWarehouseArray(product.inventories) ??
+    stockFromMainWarehouseArray(product.stocks) ??
+    stockFromMainWarehouseArray(product.bodegas) ??
+    stockFromMainWarehouseArray(product.warehouses) ??
+    stockFromMainWarehouseArray(product.stock_bodegas) ??
+    stockFromMainWarehouseArray(product.stockBodegas) ??
+    stockFromMainWarehouseArray(product.detalle_bodegas) ??
+    stockFromMainWarehouseArray(product.detalleBodegas);
+
+  if (mainWarehouseStock !== null) return mainWarehouseStock;
 
   const direct = numberOrNull(firstValue(
     product.stock,
@@ -426,6 +443,8 @@ function detectStock(product) {
     sumStockArray(product.warehouses) ??
     sumStockArray(product.stock_bodegas) ??
     sumStockArray(product.stockBodegas) ??
+    sumStockArray(product.detalle_bodegas) ??
+    sumStockArray(product.detalleBodegas) ??
     null
   );
 }
