@@ -9,18 +9,12 @@ const RELBASE_BASE_URL = String(process.env.RELBASE_BASE_URL || 'https://api.rel
 const RELBASE_AUTH_URL = process.env.RELBASE_AUTH_URL || `${RELBASE_BASE_URL}/oauth/authorize`;
 const RELBASE_TOKEN_URL = process.env.RELBASE_TOKEN_URL || `${RELBASE_BASE_URL}/oauth/token`;
 const RELBASE_PRODUCTS_URL = process.env.RELBASE_PRODUCTS_URL || `${RELBASE_BASE_URL}/api/v2/productos`;
-const RELBASE_MAIN_WAREHOUSE_NAME = String(
-  process.env.RELBASE_MAIN_WAREHOUSE_NAME || 'Bodega principal'
-).toLowerCase();
-const RELBASE_MAIN_WAREHOUSE_ID = String(process.env.RELBASE_MAIN_WAREHOUSE_ID || '').trim();
-const RELBASE_MAIN_WAREHOUSE_CODE = String(process.env.RELBASE_MAIN_WAREHOUSE_CODE || '').trim();
-const RELBASE_LIVE_STOCK_ENABLED = String(
-  process.env.RELBASE_LIVE_STOCK_ENABLED || 'true'
-).toLowerCase() !== 'false';
 const RELBASE_SAFETY_MAX_PAGES = Math.max(
   1000,
   Number(process.env.RELBASE_SAFETY_MAX_PAGES || 10000)
 );
+
+const RELBASE_MAIN_WAREHOUSE_ID = String(process.env.RELBASE_MAIN_WAREHOUSE_ID || '2881').trim();
 function ensureDataDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -237,6 +231,29 @@ function nestedName(value) {
   return '';
 }
 
+function nestedId(value) {
+  if (!value) return '';
+
+  if (typeof value === 'string' || typeof value === 'number') return value;
+
+  if (typeof value === 'object') {
+    return firstValue(
+      value.id,
+      value.ware_house_id,
+      value.warehouse_id,
+      value.warehouseId,
+      value.bodega_id,
+      value.bodegaId,
+      value.almacen_id,
+      value.almacenId,
+      value.id_bodega,
+      value.idBodega
+    );
+  }
+
+  return '';
+}
+
 function numberOrNull(value) {
   if (value === undefined || value === null || value === '') return null;
 
@@ -267,12 +284,8 @@ function stockValueFromItem(item) {
   ));
 }
 
-function compactText(value) {
-  return cleanText(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-}
-
 function warehouseText(item) {
-  return compactText(firstValue(
+  return cleanText(firstValue(
     item.bodega_nombre,
     item.bodegaNombre,
     item.warehouse_name,
@@ -281,64 +294,51 @@ function warehouseText(item) {
     item.almacenNombre,
     item.nombre_bodega,
     item.nombreBodega,
-    item.nombre,
-    item.name,
-    item.descripcion,
-    item.description,
     item.ubicacion,
     item.location,
     nestedName(item.bodega),
     nestedName(item.warehouse),
     nestedName(item.almacen),
-    nestedName(item.store)
-  ));
+    nestedName(item.store),
+    nestedName(item.location)
+  )).toLowerCase();
 }
 
-function warehouseIdText(item) {
-  return cleanText(firstValue(
-    item.bodega_id,
-    item.bodegaId,
-    item.id_bodega,
-    item.idBodega,
+function warehouseIdFromItem(item) {
+  const value = firstValue(
+    item.ware_house_id,
     item.warehouse_id,
     item.warehouseId,
+    item.bodega_id,
+    item.bodegaId,
     item.almacen_id,
     item.almacenId,
-    item.bodega?.id,
-    item.warehouse?.id,
-    item.almacen?.id
-  ));
-}
+    item.id_bodega,
+    item.idBodega,
+    item.store_id,
+    item.storeId,
+    nestedId(item.bodega),
+    nestedId(item.warehouse),
+    nestedId(item.almacen),
+    nestedId(item.store)
+  );
 
-function warehouseCodeText(item) {
-  return cleanText(firstValue(
-    item.bodega_codigo,
-    item.bodegaCodigo,
-    item.codigo_bodega,
-    item.codigoBodega,
-    item.warehouse_code,
-    item.warehouseCode,
-    item.almacen_codigo,
-    item.almacenCodigo,
-    item.bodega?.codigo,
-    item.warehouse?.code,
-    item.almacen?.codigo
-  ));
+  return cleanText(value);
 }
 
 function isMainWarehouseItem(item) {
+  const configuredId = RELBASE_MAIN_WAREHOUSE_ID;
+  const itemWarehouseId = warehouseIdFromItem(item);
+
+  if (configuredId && itemWarehouseId && itemWarehouseId === configuredId) {
+    return true;
+  }
+
   const text = warehouseText(item);
-  const id = warehouseIdText(item);
-  const code = warehouseCodeText(item);
 
-  if (RELBASE_MAIN_WAREHOUSE_ID && id && id === RELBASE_MAIN_WAREHOUSE_ID) return true;
-  if (RELBASE_MAIN_WAREHOUSE_CODE && code && code === RELBASE_MAIN_WAREHOUSE_CODE) return true;
-
-  const target = compactText(RELBASE_MAIN_WAREHOUSE_NAME);
-  if (!text && !target) return false;
+  if (!text) return false;
 
   return (
-    text.includes(target) ||
     text.includes('bodega principal') ||
     text.includes('casa matriz') ||
     text.includes('principal')
@@ -377,30 +377,6 @@ function sumStockArray(items) {
 }
 
 function detectStock(product) {
-  /*
-   * Importante:
-   * Relbase puede entregar más de un número de stock.
-   * Para Crusec necesitamos priorizar el disponible/actual antes que el stock general.
-   */
-  const availableDirect = numberOrNull(firstValue(
-    product.stock_disponible,
-    product.stockDisponible,
-    product.disponible,
-    product.available,
-    product.available_quantity,
-    product.availableQuantity,
-    product.stock_available,
-    product.stockAvailable,
-    product.stock_actual,
-    product.stockActual,
-    product.stock_actual_disponible,
-    product.stockActualDisponible,
-    product.total_stock_disponible,
-    product.totalStockDisponible
-  ));
-
-  if (availableDirect !== null) return availableDirect;
-
   const mainWarehouseStock =
     stockFromMainWarehouseArray(product.inventarios) ??
     stockFromMainWarehouseArray(product.inventory) ??
@@ -409,11 +385,22 @@ function detectStock(product) {
     stockFromMainWarehouseArray(product.bodegas) ??
     stockFromMainWarehouseArray(product.warehouses) ??
     stockFromMainWarehouseArray(product.stock_bodegas) ??
-    stockFromMainWarehouseArray(product.stockBodegas) ??
-    stockFromMainWarehouseArray(product.detalle_bodegas) ??
-    stockFromMainWarehouseArray(product.detalleBodegas);
+    stockFromMainWarehouseArray(product.stockBodegas);
 
   if (mainWarehouseStock !== null) return mainWarehouseStock;
+
+  const availableDirect = numberOrNull(firstValue(
+    product.stock_disponible,
+    product.stockDisponible,
+    product.disponible,
+    product.available,
+    product.available_quantity,
+    product.availableQuantity,
+    product.stock_available,
+    product.stockAvailable
+  ));
+
+  if (availableDirect !== null) return availableDirect;
 
   const direct = numberOrNull(firstValue(
     product.stock,
@@ -439,10 +426,21 @@ function detectStock(product) {
     sumStockArray(product.warehouses) ??
     sumStockArray(product.stock_bodegas) ??
     sumStockArray(product.stockBodegas) ??
-    sumStockArray(product.detalle_bodegas) ??
-    sumStockArray(product.detalleBodegas) ??
     null
   );
+}
+
+function detectBrand(product) {
+  return cleanText(firstValue(
+    product.brand,
+    product.marca,
+    product.brand_name,
+    product.brandName,
+    product.marca_nombre,
+    product.marcaNombre,
+    nestedName(product.brand),
+    nestedName(product.marca)
+  ));
 }
 
 function normalizeProduct(product) {
@@ -637,266 +635,6 @@ function nextPageUrl(payload, currentUrl) {
   url.searchParams.set('page', String(nextPage));
 
   return url.toString();
-}
-
-
-async function fetchRelbaseJson(url, accessToken) {
-  const response = await fetch(url, {
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
-
-  const text = await response.text();
-  let payload = {};
-
-  try {
-    payload = text ? JSON.parse(text) : {};
-  } catch {
-    payload = { raw: text };
-  }
-
-  if (!response.ok) {
-    const error = new Error(
-      payload.error_description ||
-      payload.error ||
-      payload.message ||
-      `Relbase rechazó la consulta (${response.status}).`
-    );
-    error.status = response.status;
-    error.payload = payload;
-    throw error;
-  }
-
-  return payload;
-}
-
-function collectStockArrays(value, arrays = []) {
-  if (!value || typeof value !== 'object') return arrays;
-
-  if (Array.isArray(value)) {
-    arrays.push(value);
-    for (const item of value) collectStockArrays(item, arrays);
-    return arrays;
-  }
-
-  for (const item of Object.values(value)) {
-    if (item && typeof item === 'object') collectStockArrays(item, arrays);
-  }
-
-  return arrays;
-}
-
-function stockFromRelbaseStockPayload(payload) {
-  const arrays = collectStockArrays(payload);
-
-  for (const array of arrays) {
-    const mainWarehouseStock = stockFromMainWarehouseArray(array);
-    if (mainWarehouseStock !== null) return mainWarehouseStock;
-  }
-
-  /*
-   * Algunos endpoints filtrados por bodega devuelven un objeto directo
-   * en vez de una lista. Solo usamos el valor directo cuando no existe
-   * detalle de bodegas en la respuesta.
-   */
-  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-    if (isMainWarehouseItem(payload)) {
-      const directWarehouseStock = stockValueFromItem(payload);
-      if (directWarehouseStock !== null) return directWarehouseStock;
-    }
-
-    const directStock = stockValueFromItem(payload);
-    if (directStock !== null) return directStock;
-
-    for (const key of ['data', 'stock', 'producto', 'product', 'resource', 'result']) {
-      const child = payload[key];
-      if (child && child !== payload) {
-        const nestedStock = stockFromRelbaseStockPayload(child);
-        if (nestedStock !== null) return nestedStock;
-      }
-    }
-  }
-
-  return null;
-}
-
-function buildStockLookupUrls({ sku, relbaseId, barcode } = {}) {
-  const urls = [];
-  const add = (url) => {
-    if (!url) return;
-    const value = url.toString();
-    if (!urls.includes(value)) urls.push(value);
-  };
-
-  const addWithWarehouseParams = (path) => {
-    const url = new URL(path, RELBASE_BASE_URL);
-
-    if (RELBASE_MAIN_WAREHOUSE_ID) {
-      const byId = new URL(url.toString());
-      byId.searchParams.set('id_bodega', RELBASE_MAIN_WAREHOUSE_ID);
-      add(byId);
-    }
-
-    if (RELBASE_MAIN_WAREHOUSE_CODE) {
-      const byCode = new URL(url.toString());
-      byCode.searchParams.set('codigo_bodega', RELBASE_MAIN_WAREHOUSE_CODE);
-      add(byCode);
-    }
-
-    add(url);
-  };
-
-  const cleanId = cleanText(relbaseId);
-  const cleanBarcode = cleanText(barcode);
-  const cleanProductSku = cleanSku(sku);
-
-  /*
-   * Primero probamos endpoints que pueden devolver detalle por bodega.
-   * Esto evita usar el stock general del producto cuando existe un desglose
-   * de Casa matriz / Bodega principal.
-   */
-  if (cleanId && cleanId !== cleanProductSku) {
-    addWithWarehouseParams(`/api/v1/productosStock.findById-DetalleBodegas.json/${encodeURIComponent(cleanId)}`);
-    addWithWarehouseParams(`/api/v1/productos/${encodeURIComponent(cleanId)}/stock_por_bodegas`);
-  }
-
-  /*
-   * Después probamos endpoints por SKU/código de barras. Algunos Relbase
-   * devuelven la bodega en esos endpoints; otros devuelven solo stock general.
-   */
-  if (cleanProductSku) {
-    addWithWarehouseParams(`/api/v1/productosStock.findByCodigoSku.json/${encodeURIComponent(cleanProductSku)}`);
-    addWithWarehouseParams(`/api/v1/productosStock.KITfindByCodigoSku.json/${encodeURIComponent(cleanProductSku)}`);
-  }
-
-  if (cleanBarcode) {
-    addWithWarehouseParams(`/api/v1/productosStock.findByCodigoBarra.json/${encodeURIComponent(cleanBarcode)}`);
-    addWithWarehouseParams(`/api/v1/productosStock.KITfindByCodigoBarra.json/${encodeURIComponent(cleanBarcode)}`);
-  }
-
-  if (cleanId && cleanId !== cleanProductSku) {
-    addWithWarehouseParams(`/api/v1/productosStock.findById.json/${encodeURIComponent(cleanId)}`);
-  }
-
-  return urls;
-}
-
-async function fetchStockUrlWithRefresh(url, accessToken) {
-  try {
-    return {
-      payload: await fetchRelbaseJson(url, accessToken),
-      accessToken,
-    };
-  } catch (error) {
-    if (error.status !== 401) throw error;
-
-    const refreshed = await refreshAccessToken();
-    return {
-      payload: await fetchRelbaseJson(url, refreshed.access_token),
-      accessToken: refreshed.access_token,
-    };
-  }
-}
-
-async function findStockBySku({ sku, relbaseId, barcode } = {}) {
-  if (!RELBASE_LIVE_STOCK_ENABLED) return null;
-
-  const urls = buildStockLookupUrls({ sku, relbaseId, barcode });
-  if (!urls.length) return null;
-
-  let accessToken = await getValidAccessToken();
-  let lastError = null;
-
-  for (const url of urls) {
-    try {
-      const result = await fetchStockUrlWithRefresh(url, accessToken);
-      accessToken = result.accessToken;
-
-      const stock = stockFromRelbaseStockPayload(result.payload);
-
-      if (stock !== null) {
-        return {
-          stock,
-          source: url,
-          stockUpdatedAt: new Date().toISOString(),
-        };
-      }
-    } catch (error) {
-      lastError = error;
-      console.warn(`Relbase stock no respondió para ${sku || relbaseId} en ${url}:`, error.message);
-    }
-  }
-
-  if (lastError) {
-    return {
-      stock: null,
-      error: lastError.message,
-      stockUpdatedAt: null,
-    };
-  }
-
-  return null;
-}
-
-async function debugStockBySku({ sku, relbaseId, barcode } = {}) {
-  const urls = buildStockLookupUrls({ sku, relbaseId, barcode });
-  let accessToken = await getValidAccessToken();
-  const responses = [];
-
-  for (const url of urls) {
-    try {
-      const result = await fetchStockUrlWithRefresh(url, accessToken);
-      accessToken = result.accessToken;
-
-      responses.push({
-        url,
-        stockDetected: stockFromRelbaseStockPayload(result.payload),
-        payload: result.payload,
-      });
-    } catch (error) {
-      responses.push({
-        url,
-        error: error.message,
-        status: error.status || null,
-        payload: error.payload || null,
-      });
-    }
-  }
-
-  return {
-    sku,
-    relbaseId,
-    barcode,
-    warehouse: {
-      name: RELBASE_MAIN_WAREHOUSE_NAME,
-      id: RELBASE_MAIN_WAREHOUSE_ID || null,
-      code: RELBASE_MAIN_WAREHOUSE_CODE || null,
-    },
-    checkedUrls: urls.length,
-    responses,
-  };
-}
-
-async function enrichProductStock(product) {
-  const stockResult = await findStockBySku({
-    sku: product?.sku,
-    relbaseId: product?.relbaseId,
-    barcode: product?.barcode,
-  });
-
-  if (!stockResult || stockResult.stock === null || stockResult.stock === undefined) {
-    return product;
-  }
-
-  return {
-    ...product,
-    stock: stockResult.stock,
-    stockSource: 'relbase-stock-bodega-principal',
-    stockSourceUrl: stockResult.source || null,
-    stockUpdatedAt: stockResult.stockUpdatedAt || new Date().toISOString(),
-  };
 }
 
 async function listProducts(options = {}) {
@@ -1134,7 +872,7 @@ async function findProductBySku(skuInput) {
     const match = products.find((product) => productMatchesSku(product, sku));
 
     if (match) {
-      return enrichProductStock(normalizeProduct(match));
+      return normalizeProduct(match);
     }
 
     /*
@@ -1146,7 +884,7 @@ async function findProductBySku(skuInput) {
       const normalized = normalizeProduct(candidate);
 
       if (normalized.sku && productMatchesSku(candidate, sku)) {
-        return enrichProductStock(normalized);
+        return normalized;
       }
     }
   }
@@ -1158,12 +896,5 @@ module.exports = {
   exchangeCodeForToken,
   listProducts,
   findProductBySku,
-  findStockBySku,
-  debugStockBySku,
-  enrichProductStock,
-  buildProductLookupUrls,
-  buildStockLookupUrls,
-  fetchProductsPage,
-  getValidAccessToken,
   status,
 };
