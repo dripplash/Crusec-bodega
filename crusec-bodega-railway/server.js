@@ -283,17 +283,15 @@ function writeProductCache(products) {
   const tmp = `${PRODUCT_CACHE_FILE}.tmp`;
 
   /*
-   * Escribimos primero un archivo temporal nuevo.
-   * Cuando ese archivo ya existe completo, eliminamos/reemplazamos
-   * el caché anterior. Así cada sincronización exitosa deja un
-   * products-cache.json totalmente nuevo, sin mezclar datos viejos.
+   * Escribimos primero en archivo temporal.
+   * Si todo sale bien, reemplazamos el caché anterior completo.
    */
   fs.writeFileSync(tmp, JSON.stringify(payload, null, 2));
 
-  if (fs.existsSync(PRODUCT_CACHE_FILE)) {
-    fs.rmSync(PRODUCT_CACHE_FILE, { force: true });
-  }
-
+  /*
+   * Este rename reemplaza products-cache.json completo.
+   * No mezcla con el caché anterior.
+   */
   fs.renameSync(tmp, PRODUCT_CACHE_FILE);
 
   return payload;
@@ -314,7 +312,8 @@ async function syncRelbaseProducts(reason = 'manual') {
 
   /*
    * Primero descargamos todos los productos.
-   * Si Relbase falla, NO borramos el caché anterior.
+   * No borramos el caché viejo antes, porque si Relbase falla
+   * no queremos dejar la app sin productos.
    */
   const products = await relbase.listProducts({
     onProgress(progress) {
@@ -332,8 +331,8 @@ async function syncRelbaseProducts(reason = 'manual') {
   });
 
   /*
-   * Si Relbase terminó bien, limpiamos el archivo anterior y
-   * escribimos un caché completamente nuevo.
+   * Si Relbase respondió bien y ya tenemos el catálogo completo,
+   * recién ahí limpiamos y reemplazamos el caché completo.
    */
   clearProductCache();
 
@@ -1005,6 +1004,18 @@ async function handleApi(req, res, url) {
   
   if (req.method === 'POST' && url.pathname === '/api/cache/clear-products') {
     clearProductCache();
+
+    relbaseSyncProgress = {
+      running: false,
+      percent: 0,
+      page: 0,
+      totalPages: null,
+      productCount: 0,
+      reason: 'cache_clear',
+      startedAt: null,
+      finishedAt: new Date().toISOString(),
+      error: null,
+    };
 
     return sendJson(res, 200, {
       message: 'Caché de productos eliminado. Sincroniza con Relbase para cargarlo nuevamente.',
