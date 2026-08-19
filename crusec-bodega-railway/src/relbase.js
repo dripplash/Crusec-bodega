@@ -378,12 +378,10 @@ function sumStockArray(items) {
 
 function detectStock(product) {
   /*
-   * IMPORTANTE:
-   * Antes la app podía terminar usando `stock` o `stock_total`, que en Relbase
-   * puede ser un stock general. Para Crusec necesitamos priorizar el stock
-   * disponible/actual, que es el que se parecía al "Stock actual" de Relbase.
+   * Importante:
+   * Relbase puede entregar más de un número de stock.
+   * Para Crusec necesitamos priorizar el disponible/actual antes que el stock general.
    */
-
   const availableDirect = numberOrNull(firstValue(
     product.stock_disponible,
     product.stockDisponible,
@@ -397,10 +395,8 @@ function detectStock(product) {
     product.stockActual,
     product.stock_actual_disponible,
     product.stockActualDisponible,
-    product.stock_fisico,
-    product.stockFisico,
-    product.cantidad_disponible,
-    product.cantidadDisponible
+    product.total_stock_disponible,
+    product.totalStockDisponible
   ));
 
   if (availableDirect !== null) return availableDirect;
@@ -447,19 +443,6 @@ function detectStock(product) {
     sumStockArray(product.detalleBodegas) ??
     null
   );
-}
-
-function detectBrand(product) {
-  return cleanText(firstValue(
-    product.brand,
-    product.marca,
-    product.brand_name,
-    product.brandName,
-    product.marca_nombre,
-    product.marcaNombre,
-    nestedName(product.brand),
-    nestedName(product.marca)
-  ));
 }
 
 function normalizeProduct(product) {

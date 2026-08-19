@@ -1076,6 +1076,63 @@ async function handleApi(req, res, url) {
     });
   }
 
+  if (req.method === 'GET' && url.pathname.startsWith('/api/debug/relbase-product/')) {
+    const sku = normalizeSku(decodeURIComponent(url.pathname.replace('/api/debug/relbase-product/', '')));
+
+    if (!sku) {
+      return sendJson(res, 400, { error: 'Falta SKU.' });
+    }
+
+    if (CATALOG_MODE !== 'relbase') {
+      return sendJson(res, 409, { error: 'La app no está en modo Relbase.' });
+    }
+
+    try {
+      const relbase = require('./src/relbase');
+
+      if (
+        typeof relbase.buildProductLookupUrls !== 'function' ||
+        typeof relbase.fetchProductsPage !== 'function' ||
+        typeof relbase.getValidAccessToken !== 'function'
+      ) {
+        return sendJson(res, 500, {
+          error: 'Funciones de diagnóstico Relbase no disponibles en src/relbase.js.',
+        });
+      }
+
+      const accessToken = await relbase.getValidAccessToken();
+      const urls = relbase.buildProductLookupUrls(sku);
+      const responses = [];
+
+      for (const lookupUrl of urls) {
+        try {
+          const payload = await relbase.fetchProductsPage(lookupUrl, accessToken);
+          responses.push({
+            url: lookupUrl,
+            payload,
+          });
+        } catch (error) {
+          responses.push({
+            url: lookupUrl,
+            error: error.message || 'Error consultando Relbase.',
+            status: error.status || null,
+            payload: error.payload || null,
+          });
+        }
+      }
+
+      return sendJson(res, 200, {
+        sku,
+        checkedUrls: responses.length,
+        responses,
+      });
+    } catch (error) {
+      return sendJson(res, 500, {
+        error: error.message || 'No se pudo consultar Relbase.',
+      });
+    }
+  }
+
   if (req.method === 'GET' && url.pathname.startsWith('/api/debug/stock/')) {
     const sku = normalizeSku(decodeURIComponent(url.pathname.replace('/api/debug/stock/', '')));
 
