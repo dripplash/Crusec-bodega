@@ -86,3 +86,13 @@ npm start
 ```
 
 El servidor usa Node.js 20 o superior.
+
+## Ajustes móviles incluidos en este candidato
+
+- El buscador y campos móviles usan tamaño de fuente seguro para evitar el zoom automático al enfocar en navegadores móviles.
+- El Inventario se adapta a tarjetas en pantallas pequeñas, sin desplazamiento horizontal.
+- En la ficha de producto se muestra primero el nombre y luego el SKU.
+- La marca visible del sistema queda como **Crusec** por ahora.
+- La flecha de la ubicación abre directamente el mapa de bodega.
+- El modal del mapa muestra Pasillo, Lado, Rack y Nivel antes del plano.
+

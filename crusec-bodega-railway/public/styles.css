@@ -1402,3 +1402,595 @@ body{background:#f5f8fc}
   .assignment-button-row{display:grid;grid-template-columns:1fr}
   .assignment-button-row .btn{width:100%}
 }
+
+
+/* =========================================================
+   KORDIS · AJUSTES FINALES MÓVILES
+   - Evita zoom al enfocar campos en iOS
+   - Inventario responsive sin desplazamiento horizontal
+   - Resultado: nombre primero, SKU después
+   - Flecha de ubicación interactiva
+   ========================================================= */
+
+.product-sku-row{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:7px;
+  margin:7px 0 7px;
+  min-width:0;
+}
+.product-sku-row>strong{
+  color:#263750;
+  font-size:.74rem;
+  font-weight:750;
+  line-height:1.2;
+  overflow-wrap:anywhere;
+}
+.product-sku-row .product-status-dot{
+  width:7px;
+  height:7px;
+  flex:0 0 7px;
+  border-radius:50%;
+  background:#21a44b;
+  box-shadow:0 0 0 3px rgba(33,164,75,.10);
+}
+.product-sync-label{
+  color:#718095;
+  font-size:.61rem;
+  font-weight:650;
+}
+
+.location-chevron-btn{
+  display:none;
+  border:0;
+  background:transparent;
+}
+
+.map-product-context{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:14px;
+  margin:0 0 12px;
+  color:#53647a;
+}
+.map-product-context strong{
+  color:#17263a;
+  font-size:.82rem;
+  line-height:1.35;
+}
+.map-product-context span{
+  flex:none;
+  font-size:.65rem;
+  font-weight:700;
+  color:#708096;
+}
+.map-location-summary{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:8px;
+  margin:0 0 14px;
+}
+.map-location-summary>div{
+  min-width:0;
+  padding:10px 12px;
+  border:1px solid #dbe6f2;
+  border-radius:11px;
+  background:#f8fbff;
+}
+.map-location-summary span{
+  display:block;
+  margin-bottom:3px;
+  color:#718096;
+  font-size:.59rem;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.045em;
+}
+.map-location-summary strong{
+  display:block;
+  color:#15345d;
+  font-size:.84rem;
+  text-transform:capitalize;
+  overflow-wrap:anywhere;
+}
+.map-location-summary.map-location-empty{
+  grid-template-columns:1fr;
+}
+
+@media(max-width:860px){
+  /* Safari/iOS amplía automáticamente inputs por debajo de 16px. */
+  #search-input,
+  #inventory-search,
+  #assignment-search,
+  #scanner-manual,
+  #settings-name,
+  .search-input input,
+  .field.with-icon input,
+  select{
+    font-size:16px!important;
+  }
+
+  .product-copy h2{
+    margin:0 0 7px;
+    color:#152238;
+  }
+  .product-sku-row{
+    margin:6px 0 7px;
+    gap:6px;
+  }
+  .product-sku-row>strong{
+    font-size:.68rem;
+  }
+  .product-sku-row .product-status-dot,
+  .product-sync-label{
+    display:none;
+  }
+  .product-copy .brand{
+    display:block!important;
+    margin-bottom:7px;
+    color:#0f5ddb;
+    font-size:.67rem;
+    font-weight:750;
+  }
+
+  .location-card-copy{
+    padding-right:42px;
+  }
+  .location-card-copy::after{
+    content:none!important;
+    display:none!important;
+  }
+  .location-chevron-btn{
+    position:absolute;
+    right:-3px;
+    top:50%;
+    transform:translateY(-50%);
+    display:grid;
+    place-items:center;
+    width:38px;
+    height:46px;
+    padding:0;
+    border:0;
+    border-radius:12px;
+    background:transparent;
+    color:#7c8da2;
+    transition:background .15s ease,color .15s ease,transform .15s ease;
+  }
+  .location-chevron-btn svg{
+    width:22px;
+    height:22px;
+    stroke-width:2;
+  }
+  .location-chevron-btn:hover,
+  .location-chevron-btn:focus-visible{
+    background:#f1f6fd;
+    color:#1269ed;
+    outline:none;
+  }
+  .location-chevron-btn:active{
+    transform:translateY(-50%) scale(.94);
+  }
+
+  /* INVENTARIO: se conserva toda la información, pero en tarjetas fluidas. */
+  #view-inventory .inventory-panel{
+    padding:12px;
+    overflow:hidden;
+  }
+  #view-inventory .inventory-toolbar{
+    gap:9px;
+  }
+  #view-inventory .table-wrap{
+    overflow:visible;
+    width:100%;
+    border:0;
+    border-radius:0;
+    background:transparent;
+  }
+  #view-inventory table{
+    display:block;
+    width:100%;
+    min-width:0!important;
+    border-collapse:separate;
+  }
+  #view-inventory thead{
+    display:none;
+  }
+  #view-inventory tbody{
+    display:grid;
+    width:100%;
+    gap:9px;
+  }
+  #view-inventory tbody tr{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    gap:8px 12px;
+    width:100%;
+    min-width:0;
+    padding:13px;
+    border:1px solid #e0e8f1;
+    border-radius:12px;
+    background:#fff;
+  }
+  #view-inventory tbody td{
+    display:block;
+    min-width:0;
+    padding:0;
+    border:0;
+    font-size:.7rem;
+    overflow-wrap:anywhere;
+  }
+  #view-inventory tbody td:nth-child(1){
+    grid-column:1/-1;
+    padding-bottom:8px;
+    border-bottom:1px solid #edf1f5;
+  }
+  #view-inventory tbody td:nth-child(1) strong{
+    color:#17263a;
+    font-size:.76rem;
+    line-height:1.42;
+  }
+  #view-inventory tbody td:nth-child(1) small{
+    margin-top:4px;
+    color:#1269ed;
+    font-size:.62rem;
+    font-weight:650;
+  }
+  #view-inventory tbody td:nth-child(2){
+    grid-column:1;
+    color:#64748b;
+    font-size:.66rem;
+  }
+  #view-inventory tbody td:nth-child(2)::before{
+    content:"SKU  ";
+    color:#94a3b8;
+    font-size:.57rem;
+    font-weight:750;
+    letter-spacing:.04em;
+  }
+  #view-inventory tbody td:nth-child(3){
+    grid-column:2;
+    grid-row:2;
+    text-align:right;
+  }
+  #view-inventory tbody td:nth-child(3)::before{
+    content:"Stock ";
+    margin-right:5px;
+    color:#94a3b8;
+    font-size:.57rem;
+    font-weight:750;
+  }
+  #view-inventory tbody td:nth-child(4){
+    grid-column:1;
+    align-self:center;
+    line-height:1.4;
+  }
+  #view-inventory tbody td:nth-child(5){
+    grid-column:2;
+    align-self:center;
+    justify-self:end;
+  }
+  #view-inventory .table-action{
+    min-width:66px;
+    min-height:36px;
+    padding:7px 10px;
+    border-radius:9px;
+  }
+
+  .map-product-context{
+    display:block;
+    margin-bottom:10px;
+  }
+  .map-product-context strong{
+    display:block;
+    font-size:.76rem;
+  }
+  .map-product-context span{
+    display:block;
+    margin-top:3px;
+    font-size:.61rem;
+  }
+  .map-location-summary{
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:6px;
+    margin-bottom:11px;
+  }
+  .map-location-summary>div{
+    padding:8px 7px;
+    text-align:center;
+    border-radius:9px;
+  }
+  .map-location-summary span{
+    font-size:.52rem;
+  }
+  .map-location-summary strong{
+    font-size:.72rem;
+  }
+}
+
+@media(max-width:420px){
+  #view-inventory tbody tr{
+    padding:12px;
+    gap:7px 9px;
+  }
+  .map-location-summary{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+
+
+/* =========================================================
+   KORDIS · Búsqueda predictiva / vista previa de producto
+   ========================================================= */
+.search-input{
+  z-index:28;
+}
+.search-suggestions{
+  position:absolute;
+  left:0;
+  right:0;
+  top:calc(100% + 8px);
+  z-index:90;
+  overflow:hidden;
+  border:1px solid #d8e3ef;
+  border-radius:14px;
+  background:#fff;
+  box-shadow:0 20px 48px rgba(15,35,60,.16),0 3px 10px rgba(15,35,60,.06);
+}
+.search-suggestion-list{
+  max-height:280px;
+  overflow:auto;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+}
+.search-suggestion-item{
+  width:100%;
+  min-height:58px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:12px;
+  padding:10px 12px;
+  border:0;
+  border-bottom:1px solid #edf2f7;
+  background:#fff;
+  color:#142239;
+  text-align:left;
+  transition:background .13s ease,box-shadow .13s ease;
+}
+.search-suggestion-item:last-child{border-bottom:0}
+.search-suggestion-item:hover,
+.search-suggestion-item:focus-visible,
+.search-suggestion-item.active{
+  outline:none;
+  background:#f4f8ff;
+  box-shadow:inset 3px 0 0 #1269ed;
+}
+.search-suggestion-copy{
+  min-width:0;
+}
+.search-suggestion-copy strong{
+  display:block;
+  overflow:hidden;
+  color:#152238;
+  font-size:.76rem;
+  font-weight:750;
+  line-height:1.35;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.search-suggestion-copy small{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  margin-top:5px;
+  color:#607189;
+  font-size:.64rem;
+  font-weight:650;
+}
+.search-suggestion-copy small span{
+  padding:2px 5px;
+  border-radius:5px;
+  background:#eaf2ff;
+  color:#0d63ea;
+  font-size:.53rem;
+  font-weight:850;
+  letter-spacing:.04em;
+}
+.search-suggestion-side{
+  display:grid;
+  justify-items:end;
+  gap:2px;
+  white-space:nowrap;
+}
+.search-suggestion-side b{
+  color:#17263a;
+  font-size:.72rem;
+}
+.search-suggestion-side small{
+  color:#7b8ba0;
+  font-size:.57rem;
+}
+.search-suggestion-empty{
+  padding:14px;
+  color:#6c7d91;
+  font-size:.72rem;
+  text-align:center;
+}
+.search-preview{
+  border-top:1px solid #dfe8f2;
+  background:linear-gradient(180deg,#fbfdff,#f6f9fd);
+}
+.search-preview-card{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(150px,.55fr) auto;
+  align-items:center;
+  gap:13px;
+  padding:12px;
+}
+.search-preview-copy{
+  min-width:0;
+}
+.search-preview-kicker{
+  display:block;
+  margin-bottom:3px;
+  color:#0d63ea;
+  font-size:.53rem;
+  font-weight:850;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+}
+.search-preview-copy strong{
+  display:block;
+  overflow:hidden;
+  color:#13233a;
+  font-size:.76rem;
+  line-height:1.35;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.search-preview-sku{
+  display:block;
+  margin-top:4px;
+  color:#66758a;
+  font-size:.61rem;
+  font-weight:650;
+}
+.search-preview-meta{
+  display:grid;
+  gap:5px;
+  min-width:0;
+  padding-left:12px;
+  border-left:1px solid #e1e8f0;
+}
+.search-preview-meta span{
+  display:block;
+  min-width:0;
+  overflow:hidden;
+  color:#40536b;
+  font-size:.61rem;
+  line-height:1.3;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.search-preview-meta b{
+  margin-right:5px;
+  color:#7a8a9e;
+  font-size:.52rem;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+}
+.search-preview-open{
+  min-height:36px;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:7px 10px;
+  border:1px solid #b9d3f7;
+  border-radius:9px;
+  background:#fff;
+  color:#0d5fdc;
+  font-size:.64rem;
+  font-weight:800;
+  white-space:nowrap;
+}
+.search-preview-open:hover,
+.search-preview-open:focus-visible{
+  outline:none;
+  border-color:#7eb0f5;
+  background:#edf5ff;
+}
+.search-preview-open svg{
+  width:14px;
+  height:14px;
+}
+
+/* Evita zoom automático al enfocar formularios en navegadores móviles. */
+@media(max-width:860px){
+  #search-input,
+  #inventory-search,
+  #assignment-search,
+  #scanner-manual,
+  #settings-name,
+  .search-input input,
+  .field.with-icon input,
+  select{
+    font-size:16px!important;
+  }
+
+  .search-suggestions{
+    top:calc(100% + 6px);
+    border-radius:13px;
+    box-shadow:0 18px 40px rgba(15,35,60,.18);
+  }
+  .search-suggestion-list{
+    max-height:250px;
+  }
+  .search-suggestion-item{
+    min-height:62px;
+    gap:8px;
+    padding:10px;
+  }
+  .search-suggestion-copy strong{
+    font-size:.72rem;
+    white-space:normal;
+    display:-webkit-box;
+    -webkit-line-clamp:2;
+    -webkit-box-orient:vertical;
+  }
+  .search-suggestion-side small{
+    display:none;
+  }
+  .search-preview-card{
+    grid-template-columns:minmax(0,1fr) auto;
+    gap:9px;
+    padding:10px;
+  }
+  .search-preview-meta{
+    grid-column:1/-1;
+    grid-row:2;
+    display:flex;
+    gap:12px;
+    padding:8px 0 0;
+    border-left:0;
+    border-top:1px solid #e1e8f0;
+  }
+  .search-preview-meta span{
+    flex:1;
+    white-space:normal;
+  }
+  .search-preview-open{
+    grid-column:2;
+    grid-row:1;
+  }
+
+  /* Mantiene Inventario dentro del ancho disponible, sin scroll horizontal. */
+  #view-inventory,
+  #view-inventory .panel,
+  #view-inventory .table-wrap,
+  #view-inventory table,
+  #view-inventory tbody,
+  #view-inventory tbody tr{
+    max-width:100%!important;
+    min-width:0!important;
+  }
+  #view-inventory .table-wrap{
+    overflow-x:hidden!important;
+  }
+}
+
+@media(max-width:420px){
+  .search-suggestion-copy small{
+    font-size:.59rem;
+  }
+  .search-suggestion-side b{
+    font-size:.67rem;
+  }
+  .search-preview-copy strong{
+    white-space:normal;
+    display:-webkit-box;
+    -webkit-line-clamp:2;
+    -webkit-box-orient:vertical;
+  }
+}

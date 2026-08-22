@@ -28,6 +28,7 @@ function escapeHtml(value=''){
 }
 function normalizeSku(value){ return String(value||'').trim().toUpperCase(); }
 function sideLabel(side){ return String(side||'').toUpperCase()==='I' ? 'izquierdo' : 'derecho'; }
+function displayBrand(){ return 'Crusec'; }
 function locationKind(loc){ return !loc ? 'none' : (loc.type === 'special' || loc.areaKey ? 'special' : 'normal'); }
 function locationLabel(loc){
   if(!loc) return 'Sin ubicación asignada';
@@ -57,6 +58,148 @@ function mergeProduct(product){
   if(i>=0) state.products[i]={...state.products[i],...product};
   else state.products.push(product);
   return i>=0 ? state.products[i] : product;
+}
+
+let searchSuggestionIndex = -1;
+let searchSuggestionProducts = [];
+
+function searchSuggestionScore(product, query){
+  const q=String(query||'').trim().toUpperCase();
+  if(!q) return 999;
+  const sku=String(product?.sku||'').toUpperCase();
+  const barcode=String(product?.barcode||'').toUpperCase();
+  const name=String(product?.name||'').toUpperCase();
+  if(sku===q || barcode===q) return 0;
+  if(sku.startsWith(q)) return 1;
+  if(barcode.startsWith(q)) return 2;
+  if(name.startsWith(q)) return 3;
+  if(sku.includes(q)) return 4;
+  if(barcode.includes(q)) return 5;
+  if(name.includes(q)) return 6;
+  return 99;
+}
+
+function getSearchSuggestions(query){
+  const q=String(query||'').trim();
+  if(!q) return [];
+  return state.products
+    .filter(product=>matchesProduct(product,q))
+    .map(product=>({product,score:searchSuggestionScore(product,q)}))
+    .sort((a,b)=>a.score-b.score
+      || String(a.product.sku||'').length-String(b.product.sku||'').length
+      || String(a.product.name||'').localeCompare(String(b.product.name||''),'es'))
+    .slice(0,7)
+    .map(item=>item.product);
+}
+
+function hideSearchSuggestions(){
+  const panel=$('#search-suggestions');
+  if(panel) panel.classList.add('hidden');
+  $('#search-input')?.setAttribute('aria-expanded','false');
+  searchSuggestionIndex=-1;
+}
+
+function searchPreviewMarkup(product){
+  if(!product) return '';
+  const location=product.location?locationLabel(product.location):'Sin ubicación asignada';
+  const stock=Number.isFinite(Number(product.stock))?formatNumber(product.stock):'—';
+  return `
+    <div class="search-preview-card">
+      <div class="search-preview-copy">
+        <span class="search-preview-kicker">Vista previa</span>
+        <strong>${escapeHtml(product.name||'Producto sin nombre')}</strong>
+        <span class="search-preview-sku">SKU: ${escapeHtml(product.sku||'—')}</span>
+      </div>
+      <div class="search-preview-meta">
+        <span><b>Stock</b>${escapeHtml(stock)}</span>
+        <span><b>Ubicación</b>${escapeHtml(location)}</span>
+      </div>
+      <button type="button" class="search-preview-open" data-search-preview-open="${escapeHtml(product.sku||'')}">
+        Ver producto
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      </button>
+    </div>`;
+}
+
+function setSearchSuggestionActive(index, {scroll=true}={}){
+  if(!searchSuggestionProducts.length) return;
+  const max=searchSuggestionProducts.length-1;
+  searchSuggestionIndex=Math.max(0,Math.min(index,max));
+  const rows=$$('[data-search-suggestion]');
+  rows.forEach((row,i)=>{
+    const active=i===searchSuggestionIndex;
+    row.classList.toggle('active',active);
+    row.setAttribute('aria-selected',String(active));
+    if(active && scroll) row.scrollIntoView({block:'nearest'});
+  });
+  const product=searchSuggestionProducts[searchSuggestionIndex];
+  const preview=$('#search-preview');
+  if(preview){
+    preview.innerHTML=searchPreviewMarkup(product);
+    preview.classList.remove('hidden');
+    preview.querySelector('[data-search-preview-open]')?.addEventListener('click',()=>{
+      $('#search-input').value=product.sku;
+      hideSearchSuggestions();
+      searchProduct(product.sku);
+    });
+  }
+}
+
+function renderSearchSuggestions(query){
+  const panel=$('#search-suggestions');
+  const list=$('#search-suggestion-list');
+  const preview=$('#search-preview');
+  if(!panel || !list || !preview) return;
+
+  const q=String(query||'').trim();
+  if(!q){
+    list.innerHTML='';
+    preview.innerHTML='';
+    preview.classList.add('hidden');
+    hideSearchSuggestions();
+    return;
+  }
+
+  searchSuggestionProducts=getSearchSuggestions(q);
+  if(!searchSuggestionProducts.length){
+    list.innerHTML=`<div class="search-suggestion-empty">No hay coincidencias en el catálogo sincronizado.</div>`;
+    preview.innerHTML='';
+    preview.classList.add('hidden');
+    panel.classList.remove('hidden');
+    $('#search-input')?.setAttribute('aria-expanded','true');
+    searchSuggestionIndex=-1;
+    return;
+  }
+
+  list.innerHTML=searchSuggestionProducts.map((product,index)=>`
+    <button type="button" class="search-suggestion-item" role="option"
+      aria-selected="${index===0?'true':'false'}" data-search-suggestion="${escapeHtml(product.sku||'')}">
+      <span class="search-suggestion-copy">
+        <strong>${escapeHtml(product.name||'Producto sin nombre')}</strong>
+        <small><span>SKU</span>${escapeHtml(product.sku||'—')}</small>
+      </span>
+      <span class="search-suggestion-side">
+        <b>${formatNumber(product.stock)}</b>
+        <small>${product.location?'Con ubicación':'Sin ubicación'}</small>
+      </span>
+    </button>`).join('');
+
+  panel.classList.remove('hidden');
+  $('#search-input')?.setAttribute('aria-expanded','true');
+  searchSuggestionIndex=0;
+
+  $$('[data-search-suggestion]',list).forEach((row,index)=>{
+    row.addEventListener('mouseenter',()=>setSearchSuggestionActive(index,{scroll:false}));
+    row.addEventListener('focus',()=>setSearchSuggestionActive(index,{scroll:false}));
+    row.addEventListener('click',()=>{
+      const product=searchSuggestionProducts[index];
+      if(!product) return;
+      $('#search-input').value=product.sku;
+      setSearchSuggestionActive(index,{scroll:false});
+    });
+  });
+
+  setSearchSuggestionActive(0,{scroll:false});
 }
 function formatNumber(value){
   const n=Number(value);
@@ -176,6 +319,7 @@ function setView(view){
 async function searchProduct(query){
   const q=String(query||'').trim();
   if(!q) return;
+  hideSearchSuggestions();
   const message=$('#search-message');
   message.classList.add('hidden');
 
@@ -216,10 +360,10 @@ function renderCurrentProduct(){
 
   $('#product-sku').textContent=p.sku||'—';
   $('#product-name').textContent=p.name||'Producto sin nombre';
-  $('#product-brand').textContent=`Marca: ${p.brand||'Sin marca'}`;
+  $('#product-brand').textContent=`Marca: ${displayBrand(p)}`;
   $('#product-stock').textContent=p.stock??'—';
 
-  const statusText=$('.product-kicker span:last-child');
+  const statusText=$('.product-sync-label');
   if(statusText) statusText.textContent=state.status?.relbaseAuthorized?'Producto sincronizado':'Producto del catálogo';
 
   if(p.location){
@@ -236,6 +380,13 @@ function renderCurrentProduct(){
     $('#location-title').textContent='Sin ubicación';
     $('#location-side').textContent='Este producto todavía no está asignado';
     $('#location-rack').textContent='—';
+  }
+
+  const mapChevron=$('#location-chevron-btn');
+  if(mapChevron){
+    const canMap=locationKind(p.location)==='normal';
+    mapChevron.disabled=!canMap;
+    mapChevron.classList.toggle('hidden',!canMap);
   }
 
   $('#mini-map').innerHTML=warehouseMapSvg(p,true);
@@ -518,7 +669,7 @@ function renderInventory(){
   products=products.slice(0,300);
   $('#inventory-body').innerHTML=products.map(p=>`
     <tr>
-      <td><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.brand)}</small></td>
+      <td><strong>${escapeHtml(p.name)}</strong><small>Marca: ${escapeHtml(displayBrand(p))}</small></td>
       <td>${escapeHtml(p.sku)}</td>
       <td><span class="stock-table">${p.stock}</span></td>
       <td><span class="${p.location?'assigned':'unassigned'}">${escapeHtml(locationLabel(p.location))}</span></td>
@@ -560,10 +711,28 @@ function updateSummaryAssigned(){
 
 function openMapModal(){
   const p=productBySku(state.currentSku);
+  if(!p)return;
+  const loc=locationKind(p.location)==='normal'?p.location:null;
+
+  const locationSummary=loc ? `
+    <div class="map-location-summary" aria-label="Ubicación seleccionada">
+      <div><span>Pasillo</span><strong>${escapeHtml(loc.aisle)}</strong></div>
+      <div><span>Lado</span><strong>${escapeHtml(sideLabel(loc.side))}</strong></div>
+      <div><span>Rack</span><strong>${escapeHtml(loc.rack)}</strong></div>
+      <div><span>Nivel</span><strong>${escapeHtml(loc.level)}</strong></div>
+    </div>` : `
+    <div class="map-location-summary map-location-empty">
+      <div><span>Ubicación</span><strong>${escapeHtml(locationLabel(p.location))}</strong></div>
+    </div>`;
+
   openModal(`<div class="modal-title-row">
       <div><span class="eyebrow">UBICACIÓN</span><h2>Mapa de bodega</h2></div>
     </div>
-    <p class="modal-product-line">${escapeHtml(p.name)}${p.location ? ` · <strong>${escapeHtml(locationLabel(p.location))}</strong>` : ''}</p>
+    <div class="map-product-context">
+      <strong>${escapeHtml(p.name)}</strong>
+      <span>SKU ${escapeHtml(p.sku)}</span>
+    </div>
+    ${locationSummary}
     <div class="modal-map">${warehouseMapSvg(p,false)}</div>
     <p class="map-help">P1–P6 representan los pasillos. I/D indican el lado izquierdo y derecho. Rack 1 está hacia la entrada y Rack 11 hacia el fondo.</p>`);
 }
@@ -591,7 +760,7 @@ function openDetailsModal(){
     <div class="modal-details-grid">
       <div class="detail-box"><span>SKU</span><strong>${escapeHtml(p.sku)}</strong></div>
       <div class="detail-box"><span>Código de barras</span><strong>${escapeHtml(p.barcode)}</strong></div>
-      <div class="detail-box"><span>Marca</span><strong>${escapeHtml(p.brand)}</strong></div>
+      <div class="detail-box"><span>Marca</span><strong>${escapeHtml(displayBrand(p))}</strong></div>
       <div class="detail-box"><span>Stock</span><strong>${p.stock} unidades</strong></div>
       <div class="detail-box" style="grid-column:1/-1"><span>Ubicación</span><strong>${escapeHtml(locationLabel(p.location))}</strong></div>
     </div>`);
@@ -762,11 +931,46 @@ function setupEvents(){
   }));
   document.addEventListener('click',e=>{if(!e.target.closest('.profile-btn')&&!e.target.closest('.profile-popover'))$('#profile-popover').classList.add('hidden')});
 
-  $('#search-form').addEventListener('submit',e=>{e.preventDefault();searchProduct($('#search-input').value)});
-  $('#search-input').addEventListener('input',e=>{e.target.value=e.target.value.toUpperCase()});
+  $('#search-form').addEventListener('submit',e=>{
+    e.preventDefault();
+    searchProduct($('#search-input').value);
+  });
+  $('#search-input').addEventListener('input',e=>{
+    const cursor=e.target.selectionStart;
+    e.target.value=e.target.value.toUpperCase();
+    if(Number.isInteger(cursor)) e.target.setSelectionRange(cursor,cursor);
+    renderSearchSuggestions(e.target.value);
+  });
+  $('#search-input').addEventListener('focus',e=>{
+    if(e.target.value.trim()) renderSearchSuggestions(e.target.value);
+  });
+  $('#search-input').addEventListener('keydown',e=>{
+    const panel=$('#search-suggestions');
+    const open=panel && !panel.classList.contains('hidden') && searchSuggestionProducts.length;
+    if(e.key==='ArrowDown' && open){
+      e.preventDefault();
+      setSearchSuggestionActive(searchSuggestionIndex<0?0:searchSuggestionIndex+1);
+    }else if(e.key==='ArrowUp' && open){
+      e.preventDefault();
+      setSearchSuggestionActive(searchSuggestionIndex<=0?searchSuggestionProducts.length-1:searchSuggestionIndex-1);
+    }else if(e.key==='Enter' && open && searchSuggestionIndex>=0){
+      e.preventDefault();
+      const product=searchSuggestionProducts[searchSuggestionIndex];
+      if(product){
+        e.target.value=product.sku;
+        searchProduct(product.sku);
+      }
+    }else if(e.key==='Escape'){
+      hideSearchSuggestions();
+    }
+  });
+  document.addEventListener('pointerdown',e=>{
+    if(!e.target.closest('.search-input')) hideSearchSuggestions();
+  });
   $$('[data-example]').forEach(btn=>btn.addEventListener('click',()=>{$('#search-input').value=btn.dataset.example;searchProduct(btn.dataset.example)}));
   $('#scan-btn').addEventListener('click',openScanner);
   $('#open-map-btn').addEventListener('click',openMapModal);
+  $('#location-chevron-btn')?.addEventListener('click',openMapModal);
   $('#mobile-open-map')?.addEventListener('click',openMapModal);
   $('#mobile-excel-action')?.addEventListener('click',()=>setView('excel'));
   $('#mobile-open-map')?.addEventListener('click',openMapModal);

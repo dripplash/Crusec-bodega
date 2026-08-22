@@ -100,7 +100,13 @@
               <form id="search-form" class="search-bar">
                 <div class="search-input">
                   <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.4-3.4"/></svg>
-                  <input id="search-input" autocomplete="off" placeholder="Buscar por SKU, código de barras o nombre de producto..." />
+                  <input id="search-input" autocomplete="off" spellcheck="false"
+                    role="combobox" aria-autocomplete="list" aria-controls="search-suggestions"
+                    aria-expanded="false" placeholder="Buscar por SKU, código de barras o nombre de producto..." />
+                  <div id="search-suggestions" class="search-suggestions hidden" role="listbox" aria-label="Sugerencias de productos">
+                    <div id="search-suggestion-list" class="search-suggestion-list"></div>
+                    <div id="search-preview" class="search-preview hidden" aria-live="polite"></div>
+                  </div>
                 </div>
                 <button class="btn btn-primary" type="submit">
                   <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.4-3.4"/></svg><span>Buscar</span>
@@ -128,10 +134,14 @@
                     </svg>
                   </div>
                   <div class="product-copy">
-                    <div class="product-kicker"><span class="sku-pill">SKU</span><span class="product-status-dot"></span><span>Producto sincronizado</span></div>
-                    <h2 id="product-sku">ANDADORBB46CM</h2>
-                    <p id="product-name">Nuevo Andador Para Bebés Musical Multifuncional 46 Cm</p>
-                    <p class="brand" id="product-brand">Marca: Baby Home</p>
+                    <h2 id="product-name">Nuevo Andador Para Bebés Musical Multifuncional 46 Cm</h2>
+                    <div class="product-sku-row">
+                      <span class="sku-pill">SKU</span>
+                      <strong id="product-sku">ANDADORBB46CM</strong>
+                      <span class="product-status-dot" aria-hidden="true"></span>
+                      <span class="product-sync-label">Producto sincronizado</span>
+                    </div>
+                    <p class="brand" id="product-brand">Marca: Crusec</p>
                     <div class="stock-row">
                       <span class="stock-badge">Stock disponible</span>
                       <strong id="product-stock">221</strong><small>unidades</small>
@@ -151,6 +161,9 @@
                     <button id="open-map-btn" type="button" class="map-link">
                       <svg viewBox="0 0 24 24"><path d="m3 6 5-2 8 3 5-2v13l-5 2-8-3-5 2z"/><path d="M8 4v13M16 7v13"/></svg>
                       Ver en mapa de bodega
+                    </button>
+                    <button id="location-chevron-btn" type="button" class="location-chevron-btn" aria-label="Ver esta ubicación en el mapa de bodega" title="Ver en mapa">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
                     </button>
                   </div>
                   <div id="mini-map" class="mini-map"></div>
