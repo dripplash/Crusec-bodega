@@ -1,7 +1,6 @@
 /**
- * Crusec Bodega
- * Sistema desarrollado por David Navarro por iniciativa propia
- * para apoyo interno de bodega Crusec Life Store.
+ * KORDIS · Warehouse Management System
+ * Aplicación web de gestión de ubicaciones, inventario y sincronización con Relbase.
  *
  * Nota de autoría:
  * Este desarrollo, su estructura técnica y futuras mejoras quedan sujetos a acuerdo
@@ -13,7 +12,11 @@ const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
 const crypto = require('crypto');
-const XLSX = require('xlsx');
+let XLSX = null;
+function getXlsx() {
+  if (!XLSX) XLSX = require('xlsx');
+  return XLSX;
+}
 
 function loadEnvFile() {
   const envPath = path.join(__dirname, '.env');
@@ -126,7 +129,7 @@ function brandFromCode(code) {
   if (p === 'P') return 'Pitaya';
   if (p === 'Y') return 'Yozen';
 
-  return 'Crusec';
+  return 'Sin marca';
 }
 
 function ensureDataDir() {
@@ -719,7 +722,7 @@ function htmlPage(title, message, extra = '') {
     <h1>${title}</h1>
     <p>${message}</p>
     ${extra}
-    <a href="/">Volver a Crusec Bodega</a>
+    <a href="/">Volver a KORDIS</a>
   </main>
 </body>
 </html>`;
@@ -956,6 +959,7 @@ function buildAisleExportRows(products, type) {
   ];
 }
 function workbookBufferFromRows(rows, sheetName = 'Inventario') {
+  const XLSX = getXlsx();
   const workbook = XLSX.utils.book_new();
   const worksheet = XLSX.utils.aoa_to_sheet(rows);
 
@@ -1478,6 +1482,30 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, { product: publicProduct(mergeLocation(base, db)), message: 'Ubicación eliminada.' });
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/history') {
+    const sku = normalizeSku(url.searchParams.get('sku'));
+    const q = String(url.searchParams.get('q') || '').trim().toUpperCase();
+    const limit = Math.min(250, Math.max(1, Number(url.searchParams.get('limit') || 100)));
+    let events = readHistory().events;
+
+    if (sku) events = events.filter((event) => normalizeSku(event.sku) === sku);
+
+    if (q) {
+      events = events.filter((event) =>
+        normalizeSku(event.sku).includes(q) ||
+        String(event.productName || '').toUpperCase().includes(q) ||
+        String(event.updatedBy || '').toUpperCase().includes(q) ||
+        String(event.beforeLabel || '').toUpperCase().includes(q) ||
+        String(event.afterLabel || '').toUpperCase().includes(q)
+      );
+    }
+
+    return sendJson(res, 200, {
+      events: events.slice(0, limit),
+      total: events.length,
+    });
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/admin/history') {
     const body = await readBody(req);
     const pin = String(body.pin || '');
@@ -1563,6 +1591,8 @@ function serveStatic(res, pathname) {
     '.js': 'application/javascript; charset=utf-8',
     '.png': 'image/png',
     '.ico': 'image/x-icon',
+    '.svg': 'image/svg+xml',
+    '.webmanifest': 'application/manifest+json',
     '.json': 'application/json; charset=utf-8',
   };
 
@@ -1592,7 +1622,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`Crusec Bodega disponible en http://localhost:${PORT}`);
+  console.log(`KORDIS disponible en http://localhost:${PORT}`);
   console.log(`Catálogo: ${CATALOG_MODE}. Ubicaciones: ${LOCATIONS_FILE}`);
   console.log(`Caché productos: ${PRODUCT_CACHE_FILE}`);
 

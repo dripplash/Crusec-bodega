@@ -1,1513 +1,843 @@
-/**
- * Crusec Bodega
- * Sistema desarrollado por David Navarro por iniciativa propia
- * para apoyo interno de bodega Crusec Life Store.
- *
- * Nota de autoría:
- * Este desarrollo, su estructura técnica y futuras mejoras quedan sujetos a acuerdo
- * con David Navarro en caso de continuidad, modificación mayor, traspaso o uso
- * fuera de la operación interna de bodega.
- */
-const state = {
-  products: [],
-  selectedProduct: null,
-  searchedProduct: null,
-  specialProduct: null,
-  status: null,
-  specialConfig: {
-    areas: [],
-    maxSecondFloorPosition: 20,
-  },
-  specialSelection: {
-    areaKey: '',
-    spotKey: '',
-  },
-  adminPin: '',
-  historyUnlocked: false,
+const $ = (s, root=document) => root.querySelector(s);
+const $$ = (s, root=document) => [...root.querySelectorAll(s)];
+
+const STORAGE = {
+  profile:'kordis.profile',
+  lastSku:'kordis.lastSku'
 };
 
-const $ = (selector) => document.querySelector(selector);
-const $$ = (selector) => [...document.querySelectorAll(selector)];
+const state = {
+  profile:{name:'Usuario', avatar:'person'},
+  hasProfile:false,
+  products:[],
+  currentSku:null,
+  assignmentSku:null,
+  assignment:{aisle:1,side:'I',rack:1,level:1},
+  status:null,
+  lastSyncAt:null,
+  scannerStream:null,
+  syncing:false
+};
 
-function formatDate(value) {
-  if (!value) return 'Sin sincronizar';
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+window.addEventListener('pageshow', () => window.scrollTo(0, 0));
 
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return 'Sin información';
-
-  return new Intl.DateTimeFormat('es-CL', {
-    dateStyle: 'short',
-    timeStyle: 'medium',
-  }).format(date);
+function safeJson(value){ try{return JSON.parse(value)}catch{return null} }
+function escapeHtml(value=''){
+  return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 }
-
-function showMessage(element, message, type = 'error') {
-  element.textContent = message;
-  element.className = `message ${type}`;
-}
-
-function hideMessage(element) {
-  element.textContent = '';
-  element.className = 'message hidden';
-}
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
-
-function brandFromCode(code) {
-  const sku = String(code || '').trim().toUpperCase();
-  const prefix = sku.charAt(0);
-
-  if (prefix === 'P') return 'Pitaya';
-  if (prefix === 'Y') return 'Yozen';
-
-  return 'Crusec';
-}
-
-async function api(path, options = {}) {
-  const headers = { ...(options.headers || {}) };
-
-  if (options.body && !headers['Content-Type']) {
-    headers['Content-Type'] = 'application/json';
+function normalizeSku(value){ return String(value||'').trim().toUpperCase(); }
+function sideLabel(side){ return String(side||'').toUpperCase()==='I' ? 'izquierdo' : 'derecho'; }
+function locationKind(loc){ return !loc ? 'none' : (loc.type === 'special' || loc.areaKey ? 'special' : 'normal'); }
+function locationLabel(loc){
+  if(!loc) return 'Sin ubicación asignada';
+  if(loc.fullLabel) return loc.fullLabel;
+  if(locationKind(loc)==='special'){
+    const parts=[loc.areaLabel||loc.areaKey,loc.spotLabel||loc.spotKey];
+    if(loc.position) parts.push(`Posición ${loc.position}`);
+    return parts.filter(Boolean).join(' — ');
   }
-
-  const response = await fetch(path, {
+  return `Pasillo ${loc.aisle} — lado ${sideLabel(loc.side)} — rack ${loc.rack} — nivel ${loc.level}`;
+}
+function shortLocation(loc){
+  if(!loc) return 'Sin ubicación';
+  if(locationKind(loc)==='special') return loc.fullLabel || locationLabel(loc);
+  return `P${loc.aisle} · ${loc.side} · R${loc.rack} · N${loc.level}`;
+}
+function firstName(){ return (state.profile.name || 'Usuario').trim().split(/\s+/)[0] || 'Usuario'; }
+function productBySku(sku){ return state.products.find(p => normalizeSku(p.sku) === normalizeSku(sku)); }
+function matchesProduct(p, q){
+  const s=String(q||'').trim().toUpperCase();
+  if(!s) return true;
+  return [p.sku,p.barcode,p.name,p.brand].some(v => String(v||'').toUpperCase().includes(s));
+}
+function mergeProduct(product){
+  if(!product?.sku) return product;
+  const i=state.products.findIndex(p=>normalizeSku(p.sku)===normalizeSku(product.sku));
+  if(i>=0) state.products[i]={...state.products[i],...product};
+  else state.products.push(product);
+  return i>=0 ? state.products[i] : product;
+}
+function formatNumber(value){
+  const n=Number(value);
+  return Number.isFinite(n) ? n.toLocaleString('es-CL') : '—';
+}
+function formatDate(value){
+  if(!value) return 'Sin sincronización registrada';
+  const d=new Date(value);
+  return Number.isNaN(d.getTime()) ? 'Sin fecha disponible' : d.toLocaleString('es-CL');
+}
+async function api(url, options={}){
+  const response=await fetch(url,{
     ...options,
-    headers,
+    headers:{'Content-Type':'application/json',...(options.headers||{})}
   });
-
-  const payload = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    const error = new Error(payload.error || payload.message || `Error ${response.status}`);
-    error.status = response.status;
-    throw error;
+  const contentType=response.headers.get('content-type')||'';
+  let payload=null;
+  if(contentType.includes('application/json')){
+    payload=await response.json().catch(()=>({}));
+  }else{
+    const text=await response.text();
+    payload={message:text};
   }
-
+  if(!response.ok){
+    const err=new Error(payload?.error||payload?.message||`Error ${response.status}`);
+    err.status=response.status;
+    err.payload=payload;
+    throw err;
+  }
   return payload;
 }
-
-function locationKind(location) {
-  if (!location) return 'none';
-  return location.type === 'special' ? 'special' : 'normal';
+function loadState(){
+  const savedProfile=safeJson(localStorage.getItem(STORAGE.profile));
+  if(savedProfile?.name){
+    state.profile={...state.profile,...savedProfile};
+    state.hasProfile=true;
+  }
 }
-
-function showView(viewName) {
-  $$('.tab').forEach((button) => {
-    button.classList.toggle('active', button.dataset.view === viewName);
+async function loadStatus(){
+  const payload=await api('/api/status');
+  state.status=payload;
+  state.lastSyncAt=payload.lastSyncAt||null;
+  renderStatus();
+  return payload;
+}
+async function loadCatalog(){
+  const payload=await api('/api/products?filter=all&q=');
+  state.products=Array.isArray(payload.products)?payload.products:[];
+  if(payload.lastSyncAt) state.lastSyncAt=payload.lastSyncAt;
+  updateSummaryAssigned();
+  return state.products;
+}
+function renderStatus(){
+  const s=state.status||{};
+  if($('#summary-products')) $('#summary-products').textContent=formatNumber(s.productCount||state.products.length);
+  if($('#summary-sync-interval')) $('#summary-sync-interval').textContent=s.autoSyncEnabled?`Cada ${s.syncIntervalMinutes||30} minutos`:'Desactivada';
+  if($('#summary-sync-state')){
+    $('#summary-sync-state').textContent=s.autoSyncEnabled?'Activa':'Manual';
+    $('#summary-sync-state').classList.toggle('muted-status',!s.autoSyncEnabled);
+  }
+  const authorized=!!s.relbaseAuthorized;
+  const configured=!!s.relbaseStatus?.configured;
+  if($('#relbase-status-title')) $('#relbase-status-title').textContent=authorized?'Relbase conectado':(configured?'Relbase pendiente de autorización':'Relbase no configurado');
+  if($('#last-sync-label')) $('#last-sync-label').textContent=state.lastSyncAt?`Última sincronización: ${formatDate(state.lastSyncAt)}`:(s.syncStatus||'Sin sincronización registrada');
+  if($('#relbase-status-detail')){
+    const wh = 'Bodega principal';
+    $('#relbase-status-detail').textContent=`${formatNumber(s.productCount||0)} productos · OAuth ${authorized?'autorizado':'pendiente'} · ${wh}`;
+  }
+  $('#relbase-connect-btn')?.classList.toggle('hidden',authorized||!configured);
+  if($('#sync-now-btn')) $('#sync-now-btn').disabled=!authorized || state.syncing;
+}
+function setAvatarElements(){
+  $$('.current-avatar').forEach(el => {
+    el.dataset.avatar = state.profile.avatar;
+    el.dataset.initial = firstName().charAt(0).toUpperCase();
   });
-
-  $$('.view').forEach((view) => {
-    view.classList.remove('active');
-  });
-
-  const view = $(`#${viewName}-view`);
-  if (view) {
-    view.classList.add('active');
+}
+function applyProfile(){
+  $('#header-user-name').textContent = state.profile.name;
+  $('#profile-popover-name').textContent = state.profile.name;
+  $('#welcome-name').textContent = firstName();
+  $('#settings-preview-name').textContent = state.profile.name;
+  $('#settings-name').value = state.profile.name;
+  setAvatarElements();
+  $$('.avatar-choice').forEach(btn => btn.classList.toggle('selected', btn.dataset.avatarChoice === state.profile.avatar));
+}
+function saveProfile(){
+  const name = $('#settings-name').value.trim().slice(0,50);
+  if(!name){
+    $('#settings-name').focus();
+    return;
   }
-
-  if (viewName === 'search') {
-    setTimeout(() => $('#sku-search')?.focus(), 30);
-  }
-
-  if (viewName === 'special') {
-    setTimeout(() => $('#special-sku-search')?.focus(), 30);
-  }
+  state.profile.name = name;
+  localStorage.setItem(STORAGE.profile, JSON.stringify(state.profile));
+  applyProfile();
+  const note = $('#settings-saved');
+  note.classList.remove('hidden');
+  setTimeout(()=>note.classList.add('hidden'), 1800);
 }
 
-async function setView(viewName) {
-  showView(viewName);
+function setView(view){
+  $$('.view').forEach(v => v.classList.toggle('active', v.id === `view-${view}`));
+  $$('.nav-link').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  $$('.mobile-nav-item').forEach(b => b.classList.toggle('active', b.dataset.mobileView === view));
+  $('#profile-popover').classList.add('hidden');
+  closeDrawer();
 
-  if (viewName === 'admin') {
-    try {
-      await loadProducts();
-    } catch (error) {
-      showMessage($('#admin-message'), error.message, 'error');
+  if(view === 'locations') renderLocations();
+  if(view === 'assignments') renderAssignments();
+  if(view === 'inventory') renderInventory();
+  if(view === 'excel') renderExcelPreview();
+  if(view === 'settings') applyProfile();
+
+  window.scrollTo({top:0,behavior:'auto'});
+}
+
+async function searchProduct(query){
+  const q=String(query||'').trim();
+  if(!q) return;
+  const message=$('#search-message');
+  message.classList.add('hidden');
+
+  let candidate=state.products.find(x=>normalizeSku(x.sku)===normalizeSku(q)||String(x.barcode||'')===q);
+  if(!candidate) candidate=state.products.find(x=>matchesProduct(x,q));
+
+  if(!candidate){
+    try{
+      const list=await api(`/api/products?filter=all&q=${encodeURIComponent(q)}`);
+      candidate=(list.products||[])[0]||null;
+      if(candidate) mergeProduct(candidate);
+    }catch{}
+  }
+
+  if(!candidate){
+    message.textContent=`No encontramos “${q}” en el catálogo sincronizado.`;
+    message.classList.remove('hidden');
+    return;
+  }
+
+  try{
+    const live=await api(`/api/products/search?sku=${encodeURIComponent(candidate.sku)}`);
+    if(live.product) candidate=mergeProduct(live.product);
+    if(live.lastSyncAt) state.lastSyncAt=live.lastSyncAt;
+  }catch(error){
+    if(error.status!==404 && error.status!==502) console.warn(error);
+  }
+
+  state.currentSku=candidate.sku;
+  localStorage.setItem(STORAGE.lastSku,candidate.sku);
+  renderCurrentProduct();
+  renderStatus();
+}
+
+function renderCurrentProduct(){
+  const p=productBySku(state.currentSku);
+  if(!p) return;
+
+  $('#product-sku').textContent=p.sku||'—';
+  $('#product-name').textContent=p.name||'Producto sin nombre';
+  $('#product-brand').textContent=`Marca: ${p.brand||'Sin marca'}`;
+  $('#product-stock').textContent=p.stock??'—';
+
+  const statusText=$('.product-kicker span:last-child');
+  if(statusText) statusText.textContent=state.status?.relbaseAuthorized?'Producto sincronizado':'Producto del catálogo';
+
+  if(p.location){
+    if(locationKind(p.location)==='special'){
+      $('#location-title').textContent=p.location.areaLabel||'Ubicación especial';
+      $('#location-side').textContent=p.location.spotLabel||'Zona especial';
+      $('#location-rack').textContent=p.location.position?`Posición ${p.location.position}`:'Ubicación especial';
+    }else{
+      $('#location-title').textContent=`Pasillo ${p.location.aisle}`;
+      $('#location-side').textContent=`Lado ${sideLabel(p.location.side)}`;
+      $('#location-rack').innerHTML=`Rack ${p.location.rack}&nbsp;&nbsp;·&nbsp;&nbsp;Nivel ${p.location.level}`;
+    }
+  }else{
+    $('#location-title').textContent='Sin ubicación';
+    $('#location-side').textContent='Este producto todavía no está asignado';
+    $('#location-rack').textContent='—';
+  }
+
+  $('#mini-map').innerHTML=warehouseMapSvg(p,true);
+  $('#mobile-map') && ($('#mobile-map').innerHTML=warehouseMapSvg(p,true));
+}
+
+function warehouseMapSvg(product, compact=false){
+  const rawLoc=product?.location||null;
+  const loc=locationKind(rawLoc)==='normal'?rawLoc:null;
+  const W=compact?900:1600;
+  const H=compact?430:850;
+  const frameX=compact?10:28;
+  const frameY=compact?10:26;
+  const rackTop=compact?95:190;
+  const rackBottom=compact?326:640;
+  const cellGap=compact?2.6:6.5;
+  const rackW=compact?28:58;
+  const aisleW=compact?18:34;
+  const sidePadding=compact?34:92;
+  const groupW=rackW*2+aisleW;
+  const groupGap=(W-sidePadding*2-groupW*6)/5;
+  const cellH=(rackBottom-rackTop-cellGap*10)/11;
+  const font='font-family="Inter,Segoe UI,Arial,sans-serif"';
+
+  const rackCell=(x,y,active)=>`
+    <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${rackW}" height="${cellH.toFixed(1)}"
+      rx="${compact?3.5:6}" fill="${active?'#146ef5':'#eef3f8'}"
+      stroke="${active?'#0b5ed7':'#b9c9db'}" stroke-width="${active?(compact?1.8:2.2):(compact?1:1.25)}"/>
+    ${active?`<circle cx="${(x+rackW/2).toFixed(1)}" cy="${(y+cellH/2).toFixed(1)}" r="${compact?3.3:5}" fill="#ffffff" stroke="#0d4fae" stroke-width="${compact?1:1.4}"/>`:''}`;
+
+  let groups='';
+  for(let aisle=1;aisle<=6;aisle++){
+    const gx=sidePadding+(aisle-1)*(groupW+groupGap);
+    const leftX=gx;
+    const aisleX=gx+rackW;
+    const rightX=aisleX+aisleW;
+    const centerX=gx+groupW/2;
+    const activeAisle=!!loc&&Number(loc.aisle)===aisle;
+    let leftCells='',rightCells='';
+
+    for(let rack=1;rack<=11;rack++){
+      const y=rackTop+(11-rack)*(cellH+cellGap);
+      const side=String(loc?.side||'').toUpperCase();
+      leftCells+=rackCell(leftX,y,!!loc&&Number(loc.aisle)===aisle&&side==='I'&&Number(loc.rack)===rack);
+      rightCells+=rackCell(rightX,y,!!loc&&Number(loc.aisle)===aisle&&side==='D'&&Number(loc.rack)===rack);
+    }
+
+    groups+=`<g>
+      <text x="${centerX.toFixed(1)}" y="${compact?48:130}" text-anchor="middle" ${font}
+        fill="${activeAisle?'#146ef5':'#152238'}" font-size="${compact?19:23}" font-weight="700">P${aisle}</text>
+      <text x="${(leftX+rackW/2).toFixed(1)}" y="${compact?73:165}" text-anchor="middle" ${font}
+        fill="#23344d" font-size="${compact?11:14}" font-weight="700">I</text>
+      <text x="${(rightX+rackW/2).toFixed(1)}" y="${compact?73:165}" text-anchor="middle" ${font}
+        fill="#23344d" font-size="${compact?11:14}" font-weight="700">D</text>
+      <rect x="${aisleX.toFixed(1)}" y="${(rackTop-1).toFixed(1)}" width="${aisleW}" height="${(rackBottom-rackTop+2).toFixed(1)}"
+        rx="${aisleW/2}" fill="${activeAisle?'#f4f8ff':'#fbfcfe'}"
+        stroke="${activeAisle?'#c7dcff':'#d9e4ef'}" stroke-width="${compact?1:1.2}" stroke-dasharray="${compact?'3 3':'5 5'}"/>
+      ${leftCells}${rightCells}
+    </g>`;
+  }
+
+  let rowGuide='';
+  if(!compact){
+    for(let rack=11;rack>=1;rack--){
+      const y=rackTop+(11-rack)*(cellH+cellGap)+cellH/2+4;
+      rowGuide+=`<text x="63" y="${y.toFixed(1)}" ${font} fill="#263750" font-size="13" font-weight="700" text-anchor="middle">${rack}</text>`;
     }
   }
 
-  if (viewName === 'special') {
-    try {
-      await loadSpecialBrowser();
-    } catch (error) {
-      showMessage($('#special-message'), error.message, 'error');
-    }
+  const zoneHeader=compact?'':`
+    <g ${font}>
+      <g transform="translate(54 58)" stroke="#146ef5" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M0 7 12 0l12 7-12 7L0 7Zm0 8 12 7 12-7M0 23l12 7 12-7"/>
+      </g>
+      <text x="94" y="80" fill="#152238" font-size="15" font-weight="700" letter-spacing=".25">ZONA DE PICKING</text>
+      <text x="63" y="${rackTop-18}" fill="#263750" font-size="12.5" font-weight="700" text-anchor="middle">FONDO</text>
+      <text x="63" y="${rackBottom+31}" fill="#263750" font-size="12.5" font-weight="700" text-anchor="middle">ENTRADA</text>
+      ${rowGuide}
+    </g>`;
+
+  const legend=compact?'':`
+    <g transform="translate(${W-350} ${H-88})" ${font}>
+      <circle cx="10" cy="10" r="8" fill="#146ef5"/><circle cx="10" cy="10" r="3" fill="#fff"/>
+      <text x="29" y="15" fill="#263750" font-size="13" font-weight="700">Producto</text>
+      <line x1="148" y1="-4" x2="148" y2="26" stroke="#d7e0ea"/>
+      <rect x="176" y="1" width="23" height="18" rx="4" fill="#eef3f8" stroke="#b9c9db" stroke-width="1.2"/>
+      <text x="210" y="15" fill="#263750" font-size="13" font-weight="700">Rack</text>
+    </g>`;
+
+  const entranceY=compact?H-52:H-79;
+  const entrance=`
+    <g transform="translate(${W/2-(compact?70:103)} ${entranceY})" ${font}>
+      <path d="M18 0v${compact?20:27}m0 0-8-8m8 8 8-8" stroke="#146ef5" stroke-width="${compact?2.3:2.8}"
+        fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="${compact?38:47}" y="${compact?-2:-1}" width="${compact?103:145}" height="${compact?27:36}"
+        rx="${compact?8:11}" fill="#eff5ff" stroke="#c6dcff" stroke-width="1.2"/>
+      <text x="${compact?89.5:119.5}" y="${compact?16.5:23}" text-anchor="middle" fill="#194d91"
+        font-size="${compact?11:13.5}" font-weight="700">ENTRADA</text>
+    </g>`;
+
+  return `<svg viewBox="0 0 ${W} ${H}" role="img"
+      aria-label="${escapeHtml(loc?locationLabel(loc):'Mapa de bodega')}" xmlns="http://www.w3.org/2000/svg"
+      shape-rendering="geometricPrecision" text-rendering="geometricPrecision">
+    <rect width="${W}" height="${H}" fill="#ffffff"/>
+    <rect x="${frameX}" y="${frameY}" width="${W-frameX*2}" height="${H-frameY*2}" rx="${compact?18:25}"
+      fill="#fbfcfe" stroke="#d8e3ee" stroke-width="${compact?1.2:1.6}"/>
+    ${zoneHeader}${groups}${entrance}${legend}
+  </svg>`;
+}
+
+function renderLocations(){
+  const selected=productBySku(state.currentSku)||state.products.find(p=>locationKind(p.location)==='normal');
+  $('#full-map').innerHTML=warehouseMapSvg(selected,false);
+  const list=$('#location-list');
+  const items=state.products
+    .filter(p=>p.location)
+    .sort((a,b)=>{
+      const ak=locationKind(a.location), bk=locationKind(b.location);
+      if(ak!==bk) return ak==='normal'?-1:1;
+      if(ak==='special') return locationLabel(a.location).localeCompare(locationLabel(b.location));
+      return (a.location.aisle-b.location.aisle)||(a.location.rack-b.location.rack)||(a.location.level-b.location.level);
+    })
+    .slice(0,250);
+  list.innerHTML=items.length?items.map(p=>`
+    <button class="compact-item" type="button" data-map-sku="${escapeHtml(p.sku)}">
+      <div><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.sku)}</small></div>
+      <span class="location-tag">${escapeHtml(shortLocation(p.location))}</span>
+    </button>`).join(''):'<div class="compact-item"><div><strong>Sin ubicaciones</strong><small>Aún no hay productos ubicados.</small></div></div>';
+  $$('[data-map-sku]').forEach(btn=>btn.addEventListener('click',()=>{
+    state.currentSku=btn.dataset.mapSku;
+    localStorage.setItem(STORAGE.lastSku,state.currentSku);
+    $('#full-map').innerHTML=warehouseMapSvg(productBySku(state.currentSku),false);
+  }));
+}
+
+function renderAssignments(){
+  const q=$('#assignment-search')?.value||'';
+  const list=$('#assignment-product-list');
+  const products=state.products.filter(p=>matchesProduct(p,q)).slice(0,220);
+  list.innerHTML=products.map(p=>`
+    <button class="product-picker-item ${p.sku===state.assignmentSku?'selected':''}" type="button" data-assign-sku="${escapeHtml(p.sku)}">
+      <strong>${escapeHtml(p.name)}</strong>
+      <small>SKU: ${escapeHtml(p.sku)} · Stock ${escapeHtml(p.stock??'—')} · ${escapeHtml(shortLocation(p.location))}</small>
+    </button>`).join('');
+  $$('[data-assign-sku]').forEach(btn=>btn.addEventListener('click',()=>selectAssignmentProduct(btn.dataset.assignSku)));
+  renderAssignmentEditor();
+}
+function selectAssignmentProduct(sku){
+  const p=productBySku(sku); if(!p)return;
+  state.assignmentSku=p.sku;
+  state.assignment=locationKind(p.location)==='normal'
+    ? {aisle:Number(p.location.aisle),side:String(p.location.side).toUpperCase(),rack:Number(p.location.rack),level:Number(p.location.level)}
+    : {aisle:1,side:'I',rack:1,level:1};
+  renderAssignments();
+}
+function renderAssignmentEditor(){
+  const p=productBySku(state.assignmentSku); if(!p)return;
+  $('#assign-sku').textContent=p.sku;
+  $('#assign-name').textContent=p.name;
+  $('#assign-stock').textContent=p.stock??'—';
+  $('#delete-location-btn')?.classList.toggle('hidden',!p.location);
+
+  renderChoice('#aisle-options',[1,2,3,4,5,6],'aisle',v=>String(v));
+  renderChoice('#side-options',['I','D'],'side',v=>v==='I'?'Izquierdo':'Derecho');
+  renderChoice('#rack-options',Array.from({length:11},(_,i)=>i+1),'rack',v=>String(v));
+  renderChoice('#level-options',[1,2,3,4,5],'level',v=>String(v));
+  updateAssignmentPreview();
+}
+function renderChoice(selector, values, key, labeler){
+  const el=$(selector);
+  el.innerHTML=values.map(v=>`<button type="button" class="choice-btn ${String(state.assignment[key])===String(v)?'active':''}" data-choice-key="${key}" data-choice-value="${v}">${labeler(v)}</button>`).join('');
+  $$('[data-choice-key]',el).forEach(btn=>btn.addEventListener('click',()=>{
+    const k=btn.dataset.choiceKey; let val=btn.dataset.choiceValue;
+    if(k!=='side') val=Number(val);
+    state.assignment[k]=val;
+    renderAssignmentEditor();
+  }));
+}
+function updateAssignmentPreview(){
+  const l=state.assignment;
+  $('#assignment-preview').innerHTML=`Ubicación seleccionada: <strong>Pasillo ${l.aisle} · ${l.side==='I'?'Izquierdo':'Derecho'} · Rack ${l.rack} · Nivel ${l.level}</strong>`;
+}
+async function saveAssignment(){
+  const p=productBySku(state.assignmentSku); if(!p)return;
+  try{
+    const payload=await api(`/api/products/${encodeURIComponent(p.sku)}/location`,{
+      method:'PUT',
+      body:JSON.stringify({...state.assignment,updatedBy:state.profile.name})
+    });
+    mergeProduct(payload.product);
+    state.currentSku=p.sku;
+    localStorage.setItem(STORAGE.lastSku,p.sku);
+    renderAssignments();
+    renderCurrentProduct();
+    updateSummaryAssigned();
+    showToast(payload.message||`Ubicación guardada para ${p.sku}`);
+  }catch(error){
+    showToast(error.message||'No se pudo guardar la ubicación');
   }
 }
 
-function populateSpecialBrowserFilters() {
-  const areaSelect = $('#browser-area-select');
-
-  if (!areaSelect) return;
-
-  areaSelect.innerHTML = '<option value="">Todas las zonas</option>';
-
-  for (const area of state.specialConfig.areas || []) {
-    areaSelect.insertAdjacentHTML(
-      'beforeend',
-      `<option value="${escapeHtml(area.key)}">${escapeHtml(area.label)}</option>`
-    );
-  }
-
-  populateSpotSelect();
-}
-
-function populateSpotSelect() {
-  const areaSelect = $('#browser-area-select');
-  const spotSelect = $('#browser-spot-select');
-
-  if (!areaSelect || !spotSelect) return;
-
-  const area = (state.specialConfig.areas || []).find((item) => item.key === areaSelect.value);
-
-  spotSelect.innerHTML = '<option value="">Todos los lugares</option>';
-
-  const spots = area
-    ? area.spots
-    : (state.specialConfig.areas || []).flatMap((item) => item.spots);
-
-  const unique = [];
-  const seen = new Set();
-
-  for (const spot of spots) {
-    const key = `${spot.key}:${spot.label}`;
-
-    if (seen.has(key)) continue;
-
-    seen.add(key);
-    unique.push(spot);
-  }
-
-  for (const spot of unique) {
-    spotSelect.insertAdjacentHTML(
-      'beforeend',
-      `<option value="${escapeHtml(spot.key)}">${escapeHtml(spot.label)}</option>`
-    );
+async function deleteCurrentLocation(){
+  const p=productBySku(state.assignmentSku); if(!p?.location)return;
+  if(!confirm(`¿Quitar la ubicación actual de ${p.sku}?`)) return;
+  try{
+    const payload=await api(`/api/products/${encodeURIComponent(p.sku)}/location`,{
+      method:'DELETE',
+      body:JSON.stringify({updatedBy:state.profile.name})
+    });
+    mergeProduct(payload.product);
+    state.currentSku=p.sku;
+    renderAssignments();
+    renderCurrentProduct();
+    updateSummaryAssigned();
+    showToast(payload.message||'Ubicación eliminada');
+  }catch(error){
+    showToast(error.message||'No se pudo eliminar la ubicación');
   }
 }
 
-async function loadStatus() {
-  try {
-    const status = await api('/api/status');
-
-    state.status = status;
-    state.specialConfig.areas = status.specialAreas || [];
-    state.specialConfig.maxSecondFloorPosition = status.maxSecondFloorPosition || 20;
-
-    const positionInput = $('#special-position-input');
-    if (positionInput) {
-      positionInput.max = state.specialConfig.maxSecondFloorPosition;
-    }
-
-    const indicator = $('#connection-indicator');
-
-    if (status.relbaseEnabled && status.relbaseAuthorized) {
-      indicator.textContent = `Relbase conectado · ${status.productCount || 0} productos guardados`;
-      indicator.className = 'connection-indicator connected';
-    } else if (status.relbaseEnabled) {
-      indicator.textContent = 'Relbase pendiente de autorización';
-      indicator.className = 'connection-indicator demo';
-    } else {
-      indicator.textContent = 'Modo demostración · Relbase aún no está conectado';
-      indicator.className = 'connection-indicator demo';
-    }
-
-    populateSpecialBrowserFilters();
-  } catch (error) {
-    const indicator = $('#connection-indicator');
-    indicator.textContent = 'No conectado';
-    indicator.className = 'connection-indicator error';
+async function openSpecialLocationModal(){
+  const p=productBySku(state.assignmentSku); if(!p)return;
+  const areas=state.status?.specialAreas||[];
+  if(!areas.length){
+    showToast('No hay zonas especiales configuradas.');
+    return;
   }
-}
-
-async function searchProduct(searchText) {
-  const message = $('#search-message');
-
-  hideMessage(message);
-  $('#search-result').classList.add('hidden');
-
-  try {
-    const payload = await api(`/api/products/search?sku=${encodeURIComponent(searchText)}`);
-    const product = {
-      ...payload.product,
-      stockUpdatedAt: payload.product?.stockUpdatedAt || payload.lastSyncAt || null,
-      updatedAt: payload.product?.updatedAt || payload.lastSyncAt || null,
-    };
-
-    state.searchedProduct = product;
-    renderSearchResult(product);
-  } catch (error) {
-    state.searchedProduct = null;
-    showMessage(message, error.message, 'error');
-  }
-}
-
-function renderUpdateMeta(product) {
-  if (!product?.locationUpdatedAt && !product?.locationUpdatedBy) return '';
-
-  const who = product.locationUpdatedBy || 'Sin identificar';
-  const when = product.locationUpdatedAt ? formatDate(product.locationUpdatedAt) : 'Sin fecha';
-
-  return `
-    <p class="result-update-line">
-      Última actualización: <strong>${escapeHtml(who)}</strong> · ${escapeHtml(when)}
-    </p>
-  `;
-}
-
-function renderNormalLocationContent(location, missing = false, product = null) {
-  const aisle = missing ? '—' : escapeHtml(location.aisle);
-  const side = missing ? '—' : escapeHtml(location.sideLabel);
-  const rack = missing ? '—' : escapeHtml(location.rack);
-  const level = missing ? '—' : escapeHtml(location.level);
-
-  const summary = missing
-    ? 'Este producto todavía no tiene una ubicación. Puedes agregarla ahora.'
-    : escapeHtml(location.fullLabel);
-
-  return `
-    <div class="location-grid ${missing ? 'missing-grid' : ''}">
-      <div class="location-box">
-        <span>Pasillo</span>
-        <strong>${aisle}</strong>
-      </div>
-      <div class="location-box">
-        <span>Lado</span>
-        <strong>${side}</strong>
-      </div>
-      <div class="location-box">
-        <span>Rack</span>
-        <strong>${rack}</strong>
-      </div>
-      <div class="location-box">
-        <span>Nivel</span>
-        <strong>${level}</strong>
-      </div>
+  const current=locationKind(p.location)==='special'?p.location:null;
+  const areaOptions=areas.map(a=>`<option value="${escapeHtml(a.key)}" ${current?.areaKey===a.key?'selected':''}>${escapeHtml(a.label)}</option>`).join('');
+  openModal(`<div class="modal-title-row"><div><span class="eyebrow">UBICACIÓN ESPECIAL</span><h2>${escapeHtml(p.sku)}</h2></div></div>
+    <p>${escapeHtml(p.name)}</p>
+    <div class="special-modal-grid">
+      <label>Zona<select id="special-area-select">${areaOptions}</select></label>
+      <label>Lugar<select id="special-spot-select"></select></label>
+      <label id="special-position-wrap" class="hidden">Posición<input id="special-position-input" type="number" min="1" inputmode="numeric" placeholder="Ejemplo: 8"></label>
     </div>
-    <p class="location-full ${missing ? 'missing-copy' : ''}">${summary}</p>
-    ${renderUpdateMeta(product)}
-  `;
+    <div class="modal-action-row"><button id="save-special-modal" class="btn btn-primary" type="button">Guardar ubicación especial</button></div>`);
+
+  const areaSelect=$('#special-area-select'), spotSelect=$('#special-spot-select'), posWrap=$('#special-position-wrap'), posInput=$('#special-position-input');
+  const refreshSpots=()=>{
+    const area=areas.find(a=>a.key===areaSelect.value)||areas[0];
+    spotSelect.innerHTML=(area?.spots||[]).map(s=>`<option value="${escapeHtml(s.key)}" ${current?.spotKey===s.key?'selected':''}>${escapeHtml(s.label)}</option>`).join('');
+    if(current?.position) posInput.value=current.position;
+    posWrap.classList.toggle('hidden',spotSelect.value!=='PISO');
+  };
+  areaSelect.addEventListener('change',refreshSpots);
+  spotSelect.addEventListener('change',()=>posWrap.classList.toggle('hidden',spotSelect.value!=='PISO'));
+  refreshSpots();
+  $('#save-special-modal').addEventListener('click',async()=>{
+    try{
+      const payload=await api(`/api/products/${encodeURIComponent(p.sku)}/special-location`,{
+        method:'PUT',
+        body:JSON.stringify({
+          areaKey:areaSelect.value,
+          spotKey:spotSelect.value,
+          position:spotSelect.value==='PISO'?Number(posInput.value):null,
+          updatedBy:state.profile.name
+        })
+      });
+      mergeProduct(payload.product);
+      state.currentSku=p.sku;
+      closeModal();
+      renderAssignments();
+      renderCurrentProduct();
+      updateSummaryAssigned();
+      showToast(payload.message||'Ubicación especial guardada');
+    }catch(error){
+      showToast(error.message||'No se pudo guardar la ubicación especial');
+    }
+  });
 }
 
-function renderSpecialLocationContent(location, product = null) {
-  const hasPosition = Number.isInteger(location.position);
+function renderInventory(){
+  const q=$('#inventory-search')?.value||'';
+  const filter=$('#inventory-filter')?.value||'all';
+  let products=state.products.filter(p=>matchesProduct(p,q));
+  if(filter==='stock')products=products.filter(p=>p.stock>0);
+  if(filter==='assigned')products=products.filter(p=>p.location);
+  if(filter==='unassigned')products=products.filter(p=>!p.location);
+  products=products.slice(0,300);
+  $('#inventory-body').innerHTML=products.map(p=>`
+    <tr>
+      <td><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.brand)}</small></td>
+      <td>${escapeHtml(p.sku)}</td>
+      <td><span class="stock-table">${p.stock}</span></td>
+      <td><span class="${p.location?'assigned':'unassigned'}">${escapeHtml(locationLabel(p.location))}</span></td>
+      <td><button type="button" class="table-action" data-edit-inventory="${p.sku}">Editar</button></td>
+    </tr>`).join('');
+  $$('[data-edit-inventory]').forEach(btn=>btn.addEventListener('click',()=>{
+    state.assignmentSku=btn.dataset.editInventory;
+    selectAssignmentProduct(state.assignmentSku);
+    setView('assignments');
+  }));
+}
 
-  return `
-    <div class="location-grid special-grid">
-      <div class="location-box">
-        <span>Zona</span>
-        <strong>${escapeHtml(location.areaLabel)}</strong>
-      </div>
-      <div class="location-box">
-        <span>Lugar</span>
-        <strong>${escapeHtml(location.spotLabel)}</strong>
-      </div>
-      <div class="location-box">
-        <span>Posición</span>
-        <strong>${hasPosition ? escapeHtml(location.position) : '—'}</strong>
-      </div>
+function renderExcelPreview(){
+  const aisle=Number($('#excel-aisle')?.value||3);
+  const products=state.products.filter(p=>p.location?.aisle===aisle).sort(locationSort);
+  $('#excel-preview-count').textContent=`${products.length} producto${products.length===1?'':'s'} del Pasillo ${aisle}`;
+  $('#excel-preview-list').innerHTML=products.length?products.map(p=>`
+    <div class="compact-item">
+      <div><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.sku)}</small></div>
+      <span class="location-tag">${shortLocation(p.location)}</span>
+    </div>`).join(''):`<div class="compact-item"><div><strong>Sin productos</strong><small>Todavía no hay ubicaciones asignadas en este pasillo.</small></div></div>`;
+}
+function locationSort(a,b){
+  const sideOrder={I:0,D:1};
+  return (sideOrder[a.location.side]-sideOrder[b.location.side])||(a.location.rack-b.location.rack)||(a.location.level-b.location.level);
+}
+function downloadExcel(){
+  const aisle=Number($('#excel-aisle').value);
+  const url=`/api/exports/aisle?aisle=${encodeURIComponent(aisle)}&type=final`;
+  window.location.href=url;
+  showToast(`Preparando Excel del Pasillo ${aisle}`);
+}
+
+function updateSummaryAssigned(){
+  const assigned=state.products.filter(p=>!!p.location).length;
+  if($('#summary-assigned')) $('#summary-assigned').innerHTML=`${assigned.toLocaleString('es-CL')} <em>productos</em>`;
+  if($('#summary-products') && state.products.length) $('#summary-products').textContent=state.products.length.toLocaleString('es-CL');
+}
+
+function openMapModal(){
+  const p=productBySku(state.currentSku);
+  openModal(`<div class="modal-title-row">
+      <div><span class="eyebrow">UBICACIÓN</span><h2>Mapa de bodega</h2></div>
     </div>
-    <p class="location-full">${escapeHtml(location.fullLabel)}</p>
-    ${renderUpdateMeta(product)}
-  `;
+    <p class="modal-product-line">${escapeHtml(p.name)}${p.location ? ` · <strong>${escapeHtml(locationLabel(p.location))}</strong>` : ''}</p>
+    <div class="modal-map">${warehouseMapSvg(p,false)}</div>
+    <p class="map-help">P1–P6 representan los pasillos. I/D indican el lado izquierdo y derecho. Rack 1 está hacia la entrada y Rack 11 hacia el fondo.</p>`);
 }
-
-function renderSearchResult(product) {
-  $('#result-name').textContent = product.name;
-  $('#result-sku').textContent = `SKU: ${product.sku}`;
-  $('#result-brand').textContent = `Marca: ${product.brand || brandFromCode(product.sku)}`;
-  $('#result-stock').textContent = product.stock === null || product.stock === undefined ? '—' : `${product.stock}`;
-
-  const stockDate = product.stockUpdatedAt || product.updatedAt || null;
-
-  $('#result-stock-time').textContent = stockDate
-    ? `Actualizado: ${formatDate(stockDate)}`
-    : 'Stock no informado por Relbase';
-
-  const panel = $('#location-panel');
-  const content = $('#location-content');
-  const editButton = $('#edit-result-button');
-  const kind = locationKind(product.location);
-
-  panel.classList.remove('missing', 'special-panel');
-
-  if (kind === 'normal') {
-    content.innerHTML = renderNormalLocationContent(product.location, false, product);
-    editButton.textContent = 'Editar ubicación';
-  } else if (kind === 'special') {
-    panel.classList.add('special-panel');
-    content.innerHTML = renderSpecialLocationContent(product.location, product);
-    editButton.textContent = 'Editar ubicación especial';
-  } else {
-    panel.classList.add('missing');
-    content.innerHTML = renderNormalLocationContent({}, true, product);
-    editButton.textContent = 'Asignar ubicación';
+async function openHistoryModal(){
+  const p=productBySku(state.currentSku); if(!p)return;
+  openModal(`<h2>Historial de ubicaciones</h2><p>${escapeHtml(p.name)} · ${escapeHtml(p.sku)}</p><div class="history-list"><div class="history-entry"><strong>Cargando…</strong></div></div>`);
+  try{
+    const payload=await api(`/api/history?sku=${encodeURIComponent(p.sku)}&limit=100`);
+    const history=payload.events||[];
+    const list=$('.history-list');
+    if(!list)return;
+    list.innerHTML=history.length?history.map(h=>`
+      <div class="history-entry">
+        <strong>${escapeHtml(h.afterLabel||h.action||'Cambio de ubicación')}</strong>
+        <small>${escapeHtml(h.updatedBy||'Sin identificar')} · ${formatDate(h.createdAt)}</small>
+        ${h.beforeLabel?`<small>Antes: ${escapeHtml(h.beforeLabel)}</small>`:''}
+      </div>`).join(''):`<div class="history-entry"><strong>Sin cambios registrados</strong><small>Los próximos cambios aparecerán aquí.</small></div>`;
+  }catch(error){
+    const list=$('.history-list'); if(list) list.innerHTML=`<div class="history-entry"><strong>No se pudo cargar el historial</strong><small>${escapeHtml(error.message)}</small></div>`;
   }
-
-  $('#search-result').classList.remove('hidden');
 }
-
-async function openSearchedProductEditor() {
-  if (!state.searchedProduct) return;
-
-  if (locationKind(state.searchedProduct.location) === 'special') {
-    showView('special');
-    state.specialProduct = state.searchedProduct;
-    renderSpecialProduct(state.searchedProduct);
-    await loadSpecialBrowser();
-    return;
+function openDetailsModal(){
+  const p=productBySku(state.currentSku);
+  openModal(`<h2>Detalles del producto</h2><p>${escapeHtml(p.name)}</p>
+    <div class="modal-details-grid">
+      <div class="detail-box"><span>SKU</span><strong>${escapeHtml(p.sku)}</strong></div>
+      <div class="detail-box"><span>Código de barras</span><strong>${escapeHtml(p.barcode)}</strong></div>
+      <div class="detail-box"><span>Marca</span><strong>${escapeHtml(p.brand)}</strong></div>
+      <div class="detail-box"><span>Stock</span><strong>${p.stock} unidades</strong></div>
+      <div class="detail-box" style="grid-column:1/-1"><span>Ubicación</span><strong>${escapeHtml(locationLabel(p.location))}</strong></div>
+    </div>`);
+}
+function openModal(html){
+  $('#modal-content').innerHTML=html;
+  $('#modal-backdrop').classList.remove('hidden');
+}
+function closeModal(){
+  $('#modal-backdrop').classList.add('hidden');
+  stopScanner();
+}
+function showToast(message){
+  let t=$('#toast');
+  if(!t){
+    t=document.createElement('div');t.id='toast';t.style.cssText='position:fixed;z-index:200;left:50%;bottom:95px;transform:translateX(-50%);background:#0b2032;color:white;padding:10px 14px;border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.18);font:700 12px system-ui;transition:.2s ease;opacity:0';
+    document.body.appendChild(t);
   }
-
-  $('#admin-filter').value = 'all';
-  $('#admin-search').value = state.searchedProduct.sku;
-
-  showView('admin');
-
-  await loadProducts();
-
-  const product = state.products.find((item) => item.sku === state.searchedProduct.sku) || state.searchedProduct;
-
-  selectProduct(product);
-}
-function downloadBlob(filename, blob) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-
-  link.remove();
-  URL.revokeObjectURL(url);
+  t.textContent=message;t.style.opacity='1';
+  clearTimeout(t._timer);t._timer=setTimeout(()=>t.style.opacity='0',1800);
 }
 
-function getFilenameFromDisposition(disposition, fallback) {
-  const match = String(disposition || '').match(/filename="?([^"]+)"?/i);
-  return match?.[1] || fallback;
-}
-
-async function downloadAisleExcel(type) {
-  const aisle = Number($('#export-aisle-select')?.value || 0);
-  const message = $('#admin-message');
-
-  if (!aisle) {
-    showMessage(message, 'Debes elegir un pasillo.', 'error');
-    return;
-  }
-
-  const response = await fetch(`/api/exports/aisle?aisle=${encodeURIComponent(aisle)}&type=${encodeURIComponent(type)}`);
-
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.error || 'No se pudo generar el Excel.');
-  }
-
-  const blob = await response.blob();
-  const fallbackName = `Pasillo_${aisle}_Inventario.xlsx`;
-  const filename = getFilenameFromDisposition(
-    response.headers.get('Content-Disposition'),
-    fallbackName
-  );
-
-  downloadBlob(filename, blob);
-  showMessage(message, `Excel generado para Pasillo ${aisle}.`, 'success');
-}
-
-async function loadProducts() {
-  const filter = $('#admin-filter').value;
-  const q = $('#admin-search').value.trim();
-
-  const payload = await api(`/api/products?filter=${encodeURIComponent(filter)}&q=${encodeURIComponent(q)}`);
-
-  state.products = payload.products;
-
-  const syncStatus = $('#sync-status');
-
-  syncStatus.className = 'sync-status connected';
-
-  syncStatus.innerHTML = payload.lastSyncAt
-    ? `<span class="status-dot"></span><span><strong>Relbase conectado</strong><br>${state.products.length} productos en esta vista<br>Última actualización: ${formatDate(payload.lastSyncAt)}</span>`
-    : `<span class="status-dot"></span><span><strong>Relbase conectado</strong><br>${state.products.length} productos en esta vista<br>Sin sincronización registrada</span>`;
-
-  renderProductList();
-}
-
-function renderProductList() {
-  const list = $('#product-list');
-
-  list.innerHTML = '';
-  $('#product-count').textContent = state.products.length;
-
-  if (!state.products.length) {
-    list.innerHTML = '<p class="muted">No hay productos para este filtro.</p>';
-    return;
-  }
-
-  for (const product of state.products) {
-    const button = document.createElement('button');
-
-    button.type = 'button';
-    button.className = `product-item${state.selectedProduct?.sku === product.sku ? ' selected' : ''}`;
-
-    const stockText = product.stock === null || product.stock === undefined ? 'Stock —' : `Stock ${product.stock}`;
-    const locationText = product.location ? product.location.fullLabel : 'Sin ubicación';
-    const specialClass = locationKind(product.location) === 'special' ? 'special' : '';
-
-    button.innerHTML = `
-      <div class="product-item-top">
-        <div>
-          <strong class="product-name">${escapeHtml(product.name)}</strong>
-          <small class="product-sku">SKU: ${escapeHtml(product.sku)}</small>
-          <small class="brand-small">Marca: ${escapeHtml(product.brand || brandFromCode(product.sku))}</small>
-        </div>
-        <span class="stock-chip">${escapeHtml(stockText)}</span>
+async function openScanner(){
+  openModal(`<h2>Escanear código</h2><p>Usa la cámara o escribe el código manualmente.</p>
+    <div class="scanner-wrap">
+      <div class="scanner-video" id="scanner-video-wrap"><span>Preparando cámara…</span></div>
+      <div class="scanner-side">
+        <p>Si tu navegador no permite lectura automática, puedes introducir el código de barras o SKU.</p>
+        <input id="scanner-manual" placeholder="Código o SKU">
+        <button id="scanner-manual-btn" class="btn btn-primary" type="button">Buscar código</button>
       </div>
-      <span class="location-chip ${product.location ? '' : 'missing'} ${specialClass}">${escapeHtml(locationText)}</span>
-    `;
-
-    button.addEventListener('click', () => selectProduct(product));
-
-    list.appendChild(button);
+    </div>`);
+  $('#scanner-manual-btn').addEventListener('click',()=>{
+    const value=$('#scanner-manual').value.trim(); if(!value)return;
+    closeModal(); $('#search-input').value=value; searchProduct(value);
+  });
+  try{
+    if(!navigator.mediaDevices?.getUserMedia) throw new Error('Cámara no disponible');
+    state.scannerStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+    const wrap=$('#scanner-video-wrap');
+    if(!wrap)return;
+    const video=document.createElement('video');video.autoplay=true;video.playsInline=true;video.srcObject=state.scannerStream;
+    wrap.innerHTML='';wrap.appendChild(video);
+    if('BarcodeDetector' in window){
+      const detector=new BarcodeDetector({formats:['ean_13','ean_8','code_128','qr_code']});
+      const tick=async()=>{
+        if(!state.scannerStream||!document.body.contains(video))return;
+        try{
+          const codes=await detector.detect(video);
+          if(codes[0]?.rawValue){
+            const value=codes[0].rawValue; closeModal();$('#search-input').value=value;searchProduct(value);return;
+          }
+        }catch{}
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+  }catch{
+    const wrap=$('#scanner-video-wrap');
+    if(wrap)wrap.innerHTML='<span>La cámara no está disponible en este navegador. Usa el campo manual.</span>';
   }
 }
-
-function renderNormalOptionGroup(
-  containerId,
-  options,
-  selectedValue,
-  onSelect
-) {
-  const container = $(`#${containerId}`);
-
-  if (!container) return;
-
-  container.innerHTML = '';
-
-  for (const option of options) {
-    const value = String(
-      typeof option === 'object'
-        ? option.value
-        : option
-    );
-
-    const label =
-      typeof option === 'object'
-        ? option.label
-        : String(option);
-
-    const button = document.createElement('button');
-
-    button.type = 'button';
-
-    button.className =
-      `option-button normal-option-button${
-        String(selectedValue) === value
-          ? ' active'
-          : ''
-      }`;
-
-    button.textContent = label;
-
-    button.addEventListener('click', () => {
-      onSelect(value);
-    });
-
-    container.appendChild(button);
-  }
+function stopScanner(){
+  if(state.scannerStream){state.scannerStream.getTracks().forEach(t=>t.stop());state.scannerStream=null}
 }
 
-
-function renderNormalLocationButtons() {
-
-  // PASILLO 1 AL 6
-  renderNormalOptionGroup(
-    'aisle-buttons',
-    [1, 2, 3, 4, 5, 6],
-    $('#aisle-input').value,
-    (value) => {
-
-      $('#aisle-input').value = value;
-
-      renderNormalLocationButtons();
-    }
-  );
-
-
-  // LADO IZQUIERDO / DERECHO
-  renderNormalOptionGroup(
-    'side-buttons',
-    [
-      {
-        value: 'I',
-        label: 'Izquierdo'
-      },
-      {
-        value: 'D',
-        label: 'Derecho'
-      }
-    ],
-    $('#side-input').value,
-    (value) => {
-
-      $('#side-input').value = value;
-
-      renderNormalLocationButtons();
-    }
-  );
-
-
-  // RACK 1 AL 11
-  renderNormalOptionGroup(
-    'rack-buttons',
-    [
-      1, 2, 3, 4, 5, 6,
-      7, 8, 9, 10, 11
-    ],
-    $('#rack-input').value,
-    (value) => {
-
-      $('#rack-input').value = value;
-
-      renderNormalLocationButtons();
-    }
-  );
-
-
-  // NIVEL 1 AL 5
-  renderNormalOptionGroup(
-    'level-buttons',
-    [1, 2, 3, 4, 5],
-    $('#level-input').value,
-    (value) => {
-
-      $('#level-input').value = value;
-
-      renderNormalLocationButtons();
-    }
-  );
-}
-
-
-function selectProduct(product) {
-
-  state.selectedProduct = product;
-
-  const assignmentCard = $('#assignment-card');
-
-  assignmentCard.classList.remove('empty');
-
-  $('#assignment-empty')
-    .classList.add('hidden');
-
-  $('#assignment-content')
-    .classList.remove('hidden');
-
-
-  // DATOS DEL PRODUCTO
-  $('#assign-name').textContent =
-    product.name;
-
-  $('#assign-sku').textContent =
-    `SKU: ${product.sku}`;
-
-  $('#assign-brand').textContent =
-    `Marca: ${
-      product.brand ||
-      brandFromCode(product.sku)
-    }`;
-
-  $('#assign-stock').textContent =
-    product.stock === null ||
-    product.stock === undefined
-      ? '—'
-      : product.stock;
-
-
-  const kind =
-    locationKind(product.location);
-
-  const currentLocation =
-    $('#assignment-current-location');
-
-  currentLocation.classList.add('hidden');
-
-
-  /*
-   * SI YA TIENE UNA UBICACIÓN NORMAL
-   * cargamos automáticamente los botones.
-   */
-  if (kind === 'normal') {
-
-    $('#aisle-input').value =
-      product.location.aisle || '';
-
-    $('#side-input').value =
-      product.location.side || '';
-
-    $('#rack-input').value =
-      product.location.rack || '';
-
-    $('#level-input').value =
-      product.location.level || '';
-
-
-    $('#assignment-mode').textContent =
-      'EDITAR UBICACIÓN DE BODEGA';
-
-    $('#save-location-button').textContent =
-      'Actualizar ubicación';
-  }
-
-  /*
-   * SI NO TIENE UBICACIÓN NORMAL
-   * limpiamos las opciones.
-   */
-  else {
-
-    $('#aisle-input').value = '';
-
-    $('#side-input').value = '';
-
-    $('#rack-input').value = '';
-
-    $('#level-input').value = '';
-
-
-    $('#assignment-mode').textContent =
-      'ASIGNAR UBICACIÓN DE BODEGA';
-
-    $('#save-location-button').textContent =
-      'Guardar ubicación';
-  }
-
-
-  /*
-   * MOSTRAR UBICACIÓN ACTUAL
-   */
-  if (kind === 'special') {
-
-    currentLocation.textContent =
-      `Ubicación actual: ${
-        product.location.fullLabel
-      }. Si guardas aquí, esa ubicación especial se reemplazará.`;
-
-    currentLocation.classList
-      .remove('hidden');
-  }
-
-  else if (kind === 'normal') {
-
-    currentLocation.textContent =
-      `Ubicación actual: ${
-        product.location.fullLabel
-      }`;
-
-    currentLocation.classList
-      .remove('hidden');
-  }
-
-
-  /*
-   * MOSTRAR / OCULTAR BOTÓN BORRAR
-   */
-  $('#delete-location-button')
-    .classList.toggle(
-      'hidden',
-      !product.location
-    );
-
-
-  /*
-   * CREAR BOTONES DE
-   * PASILLO / LADO / RACK / NIVEL
-   */
-  renderNormalLocationButtons();
-
-
-  /*
-   * ACTUALIZAR LISTA
-   */
-  renderProductList();
-
-
-  /*
-   * EN CELULAR LLEVAR AUTOMÁTICAMENTE
-   * AL FORMULARIO
-   */
-  setTimeout(() => {
-
-    const isMobile =
-      window.matchMedia(
-        '(max-width: 860px)'
-      ).matches;
-
-
-    if (isMobile) {
-
-      assignmentCard.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      });
-    }
-
-  }, 80);
-}
-
-function clearSelection() {
-  state.selectedProduct = null;
-
-  $('#assignment-content').classList.add('hidden');
-  $('#assignment-empty').classList.remove('hidden');
-  $('#assignment-card').classList.add('empty');
-
-  renderProductList();
-}
-
-async function saveLocation() {
-  if (!state.selectedProduct) return;
-
-  const message = $('#admin-message');
-
-  hideMessage(message);
-
-  const previousSku = state.selectedProduct.sku;
-
-  const payload = {
-    aisle: $('#aisle-input').value,
-    side: $('#side-input').value,
-    rack: $('#rack-input').value,
-    level: $('#level-input').value,
-    updatedBy: $('#updated-by-input').value,
+async function syncNow(){
+  if(state.syncing)return;
+  const btn=$('#sync-now-btn'), box=$('#sync-progress'), fill=$('#sync-progress-fill'), pct=$('#sync-progress-percent'), label=$('#sync-progress-label');
+  state.syncing=true; renderStatus();
+  box.classList.remove('hidden');
+  fill.style.width='2%'; pct.textContent='2%'; label.textContent='Iniciando sincronización…';
+
+  const poll=async()=>{
+    try{
+      const p=await api('/api/sync/progress');
+      const percent=Math.max(2,Math.min(100,Number(p.percent||0)));
+      fill.style.width=`${percent}%`;
+      pct.textContent=`${percent}%`;
+      label.textContent=p.running
+        ? `Página ${p.page||0}${p.totalPages?` de ${p.totalPages}`:''} · Productos: ${formatNumber(p.productCount||0)}`
+        : (p.error||'Sincronización completada');
+      return p;
+    }catch{return null}
   };
 
-  try {
-    const result = await api(`/api/products/${encodeURIComponent(previousSku)}/location`, {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    });
-
-    showMessage(message, `${result.message} ${result.product.location.fullLabel}`, 'success');
-
-    if (state.searchedProduct?.sku === previousSku) {
-      state.searchedProduct = result.product;
-      renderSearchResult(result.product);
-    }
-
-    await loadProducts();
-
-    clearSelection();
-
-    if (window.matchMedia('(max-width: 860px)').matches) {
-      $('#product-list').scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      });
-    }
-  } catch (error) {
-    showMessage(message, error.message, 'error');
+  let timer=setInterval(poll,700);
+  try{
+    const result=await api('/api/sync',{method:'POST',body:'{}'});
+    clearInterval(timer); timer=null;
+    await poll();
+    if(result.lastSyncAt) state.lastSyncAt=result.lastSyncAt;
+    await loadStatus();
+    await loadCatalog();
+    renderCurrentProduct();
+    renderAssignments();
+    renderInventory();
+    renderExcelPreview();
+    fill.style.width='100%'; pct.textContent='100%'; label.textContent=result.message||'Sincronización completada';
+    showToast(result.message||'Sincronización completada');
+  }catch(error){
+    if(timer)clearInterval(timer);
+    label.textContent=error.message||'No se pudo sincronizar';
+    showToast(error.message||'No se pudo sincronizar');
+  }finally{
+    state.syncing=false; renderStatus();
   }
 }
 
-function configureKeyboardFlow() {
-  const flow = [
-    $('#aisle-input'),
-    $('#side-input'),
-    $('#rack-input'),
-    $('#level-input'),
-  ];
+function openDrawer(){
+  if(window.innerWidth>860)return;
+  $('#mobile-drawer').classList.remove('hidden');
+  $('#mobile-drawer-backdrop').classList.remove('hidden');
+}
+function closeDrawer(){
+  $('#mobile-drawer').classList.add('hidden');
+  $('#mobile-drawer-backdrop').classList.add('hidden');
+}
+function toggleSidebar(){
+  if(window.innerWidth<=860){openDrawer();return}
+  $('#sidebar').classList.toggle('collapsed');
+  document.body.classList.toggle('sidebar-collapsed');
+}
 
-  flow.forEach((input, index) => {
-    input.addEventListener('keydown', (event) => {
-      if (event.key !== 'Enter') return;
 
-      event.preventDefault();
+function showOnboarding(){
+  openModal(`<div class="onboarding">
+    <img src="/assets/kordis-logo-horizontal.png" alt="KORDIS">
+    <span class="eyebrow">BIENVENIDO A KORDIS</span>
+    <h2>¿Quién está usando el sistema?</h2>
+    <p>Ingresa tu nombre para continuar.</p>
+    <form id="onboarding-form">
+      <input id="onboarding-name" maxlength="50" autocomplete="name" placeholder="Ejemplo: Juan Pérez">
+      <button class="btn btn-primary" type="submit">Continuar</button>
+    </form>
+  </div>`);
+  $('#modal-close').classList.add('hidden');
+  $('#onboarding-form').addEventListener('submit',e=>{
+    e.preventDefault();
+    const name=$('#onboarding-name').value.trim().slice(0,50);
+    if(!name){$('#onboarding-name').focus();return}
+    state.profile.name=name;
+    state.hasProfile=true;
+    localStorage.setItem(STORAGE.profile,JSON.stringify(state.profile));
+    applyProfile();
+    $('#modal-close').classList.remove('hidden');
+    closeModal();
+  });
+  setTimeout(()=>$('#onboarding-name')?.focus(),50);
+}
 
-      if (!input.value.trim()) return;
+function setupEvents(){
+  $$('.nav-link').forEach(btn=>btn.addEventListener('click',()=>setView(btn.dataset.view)));
+  $$('[data-view-jump]').forEach(btn=>btn.addEventListener('click',()=>setView(btn.dataset.viewJump)));
+  $$('[data-mobile-view]').forEach(btn=>btn.addEventListener('click',()=>setView(btn.dataset.mobileView)));
+  $$('[data-drawer-view]').forEach(btn=>btn.addEventListener('click',()=>setView(btn.dataset.drawerView)));
 
-      if (index < flow.length - 1) {
-        flow[index + 1].focus();
-        flow[index + 1].select();
-      } else {
-        saveLocation();
-      }
-    });
+  $('#menu-btn').addEventListener('click',toggleSidebar);
+  $('#drawer-close').addEventListener('click',closeDrawer);
+  $('#mobile-drawer-backdrop').addEventListener('click',closeDrawer);
+
+  $('#profile-btn').addEventListener('click',e=>{
+    e.stopPropagation();$('#profile-popover').classList.toggle('hidden');
+  });
+  $$('[data-profile-action]').forEach(btn=>btn.addEventListener('click',()=>{
+    setView('settings');
+    if(btn.dataset.profileAction==='change')setTimeout(()=>$('#settings-name').focus(),150);
+  }));
+  document.addEventListener('click',e=>{if(!e.target.closest('.profile-btn')&&!e.target.closest('.profile-popover'))$('#profile-popover').classList.add('hidden')});
+
+  $('#search-form').addEventListener('submit',e=>{e.preventDefault();searchProduct($('#search-input').value)});
+  $('#search-input').addEventListener('input',e=>{e.target.value=e.target.value.toUpperCase()});
+  $$('[data-example]').forEach(btn=>btn.addEventListener('click',()=>{$('#search-input').value=btn.dataset.example;searchProduct(btn.dataset.example)}));
+  $('#scan-btn').addEventListener('click',openScanner);
+  $('#open-map-btn').addEventListener('click',openMapModal);
+  $('#mobile-open-map')?.addEventListener('click',openMapModal);
+  $('#mobile-excel-action')?.addEventListener('click',()=>setView('excel'));
+  $('#mobile-open-map')?.addEventListener('click',openMapModal);
+  $('#mobile-excel-action')?.addEventListener('click',()=>setView('excel'));
+  $('#history-btn').addEventListener('click',openHistoryModal);
+  $('#details-btn').addEventListener('click',openDetailsModal);
+  $('#edit-location-btn').addEventListener('click',()=>{
+    state.assignmentSku=state.currentSku;
+    selectAssignmentProduct(state.currentSku);
+    setView('assignments');
   });
 
-  $('#side-input').addEventListener('input', (event) => {
-    event.target.value = event.target.value.toUpperCase().replace(/[^DI]/g, '').slice(0, 1);
+  $('#assignment-search').addEventListener('input',renderAssignments);
+  $('#save-assignment-btn').addEventListener('click',saveAssignment);
+  $('#special-location-btn')?.addEventListener('click',openSpecialLocationModal);
+  $('#delete-location-btn')?.addEventListener('click',deleteCurrentLocation);
+  $('#inventory-search').addEventListener('input',renderInventory);
+  $('#inventory-filter').addEventListener('change',renderInventory);
+  $('#excel-aisle').addEventListener('change',renderExcelPreview);
+  $('#download-excel-btn').addEventListener('click',downloadExcel);
+  $('#sync-now-btn').addEventListener('click',syncNow);
+
+  $$('.avatar-choice').forEach(btn=>btn.addEventListener('click',()=>{
+    state.profile.avatar=btn.dataset.avatarChoice;
+    setAvatarElements();
+    $$('.avatar-choice').forEach(choice=>choice.classList.toggle('selected', choice.dataset.avatarChoice===state.profile.avatar));
+  }));
+  $('#settings-name').addEventListener('input',e=>{
+    const preview=e.target.value.trim();
+    $('#settings-preview-name').textContent=preview || 'Usuario';
+    $$('.current-avatar').forEach(el=>{el.dataset.initial=(preview||'U').charAt(0).toUpperCase()});
   });
+  $('#save-profile-btn').addEventListener('click',saveProfile);
+
+  $('#modal-close').addEventListener('click',closeModal);
+  $('#modal-backdrop').addEventListener('click',e=>{if(e.target===$('#modal-backdrop'))closeModal()});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
 }
 
-let syncProgressTimer = null;
+async function init(){
+  loadState();
+  setupEvents();
+  applyProfile();
 
-function updateSyncProgress(progress = {}) {
-  const card = $('#sync-progress-card');
-  const fill = $('#sync-progress-fill');
-  const percentText = $('#sync-progress-percent');
-  const detail = $('#sync-progress-detail');
-
-  if (!card || !fill || !percentText || !detail) return;
-
-  const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
-
-  card.classList.remove('hidden');
-  fill.style.width = `${percent}%`;
-  percentText.textContent = `${Math.round(percent)}%`;
-
-  const page = progress.page || 0;
-  const totalPages = progress.totalPages;
-
-  if (progress.error) {
-    detail.textContent = progress.error;
-    return;
+  try{
+    await loadStatus();
+    await loadCatalog();
+  }catch(error){
+    console.error(error);
+    $('#search-message').textContent=`No se pudo cargar el catálogo: ${error.message}`;
+    $('#search-message').classList.remove('hidden');
   }
 
-  if (progress.running) {
-    detail.textContent = totalPages
-      ? `Página ${page} de ${totalPages}. Productos: ${progress.productCount || 0}`
-      : `Página ${page}. Productos: ${progress.productCount || 0}`;
-    return;
+  const savedSku=localStorage.getItem(STORAGE.lastSku);
+  const initial=productBySku(savedSku)||state.products.find(p=>Number(p.stock)>0&&p.location)||state.products.find(p=>Number(p.stock)>0)||state.products[0]||null;
+  if(initial){
+    state.currentSku=initial.sku;
+    state.assignmentSku=initial.sku;
+    state.assignment=locationKind(initial.location)==='normal'
+      ? {aisle:Number(initial.location.aisle),side:String(initial.location.side).toUpperCase(),rack:Number(initial.location.rack),level:Number(initial.location.level)}
+      : {aisle:1,side:'I',rack:1,level:1};
+    renderCurrentProduct();
   }
 
-  if (percent >= 100) {
-    detail.textContent = `Sincronización completada. Productos: ${progress.productCount || 0}`;
-  } else {
-    detail.textContent = 'Preparando sincronización...';
-  }
+  renderAssignments();
+  renderInventory();
+  renderExcelPreview();
+  updateSummaryAssigned();
+  renderStatus();
+
+  if(!state.hasProfile) showOnboarding();
 }
 
-function stopSyncProgressPolling() {
-  if (syncProgressTimer) {
-    clearInterval(syncProgressTimer);
-    syncProgressTimer = null;
-  }
-}
-
-function startSyncProgressPolling() {
-  stopSyncProgressPolling();
-
-  syncProgressTimer = setInterval(async () => {
-    try {
-      const response = await fetch('/api/sync/progress');
-      const progress = await response.json();
-
-      updateSyncProgress(progress);
-
-      if (!progress.running && Number(progress.percent || 0) >= 100) {
-        stopSyncProgressPolling();
-
-        await Promise.all([
-          loadProducts(),
-          loadStatus(),
-          loadSpecialBrowser().catch(() => {}),
-        ]);
-      }
-    } catch (error) {
-      stopSyncProgressPolling();
-    }
-  }, 1000);
-}
-
-async function syncRelbase() {
-  const button = $('#sync-button');
-  const message = $('#admin-message');
-
-  hideMessage(message);
-
-  button.disabled = true;
-  button.textContent = 'Sincronizando…';
-
-  updateSyncProgress({
-    running: true,
-    percent: 1,
-    page: 0,
-    productCount: 0,
-  });
-
-  startSyncProgressPolling();
-
-  try {
-    const response = await fetch('/api/sync', {
-      method: 'POST',
-    });
-
-    const payload = await response.json().catch(() => ({}));
-
-    if (!response.ok && response.status !== 202) {
-      throw new Error(payload.error || 'No se pudo sincronizar con Relbase.');
-    }
-
-    if (payload.progress) {
-      updateSyncProgress(payload.progress);
-    }
-
-    startSyncProgressPolling();
-
-    if (payload.progress && !payload.progress.running && Number(payload.progress.percent || 0) >= 100) {
-      stopSyncProgressPolling();
-
-      showMessage(
-        message,
-        payload.message || 'Sincronización completada.',
-        'success'
-      );
-
-      await Promise.all([
-        loadProducts(),
-        loadStatus(),
-        loadSpecialBrowser().catch(() => {}),
-      ]);
-    }
-  } catch (error) {
-    stopSyncProgressPolling();
-    showMessage(message, error.message, 'error');
-  } finally {
-    button.disabled = false;
-    button.textContent = 'Sincronizar con Relbase';
-  }
-}
-
-async function deleteLocation() {
-  if (!state.selectedProduct) return;
-
-  const sku = state.selectedProduct.sku;
-  const accepted = confirm(`¿Quitar la ubicación actual de ${sku}? Después podrá asignarse nuevamente.`);
-
-  if (!accepted) return;
-
-  const message = $('#admin-message');
-
-  try {
-    const result = await api(`/api/products/${encodeURIComponent(sku)}/location`, {
-      method: 'DELETE',
-      body: JSON.stringify({
-        updatedBy: $('#updated-by-input').value,
-      }),
-    });
-
-    showMessage(message, result.message, 'success');
-
-    if (state.searchedProduct?.sku === sku) {
-      state.searchedProduct = result.product;
-      renderSearchResult(result.product);
-    }
-
-    await loadProducts();
-
-    clearSelection();
-  } catch (error) {
-    showMessage(message, error.message, 'error');
-  }
-}
-
-function getAreaConfig(areaKey) {
-  return (state.specialConfig.areas || []).find((area) => area.key === areaKey) || null;
-}
-
-function setSpecialArea(areaKey) {
-  state.specialSelection.areaKey = areaKey;
-
-  const area = getAreaConfig(areaKey);
-
-  state.specialSelection.spotKey = area?.spots?.[0]?.key || '';
-
-  renderSpecialAreaButtons();
-  renderSpecialSpotButtons();
-  syncBrowserWithSpecialSelection();
-}
-
-function setSpecialSpot(spotKey) {
-  state.specialSelection.spotKey = spotKey;
-
-  renderSpecialSpotButtons();
-  toggleSpecialPositionInput();
-  syncBrowserWithSpecialSelection();
-}
-
-function renderSpecialAreaButtons() {
-  const wrap = $('#special-area-buttons');
-
-  if (!wrap) return;
-
-  wrap.innerHTML = '';
-
-  for (const area of state.specialConfig.areas || []) {
-    const button = document.createElement('button');
-
-    button.type = 'button';
-    button.className = `option-button${state.specialSelection.areaKey === area.key ? ' active' : ''}`;
-    button.textContent = area.label;
-
-    button.addEventListener('click', () => setSpecialArea(area.key));
-
-    wrap.appendChild(button);
-  }
-}
-
-function renderSpecialSpotButtons() {
-  const wrap = $('#special-spot-buttons');
-
-  if (!wrap) return;
-
-  wrap.innerHTML = '';
-
-  const area = getAreaConfig(state.specialSelection.areaKey);
-
-  if (!area) return;
-
-  for (const spot of area.spots || []) {
-    const button = document.createElement('button');
-
-    button.type = 'button';
-    button.className = `option-button${state.specialSelection.spotKey === spot.key ? ' active' : ''}`;
-    button.textContent = spot.label;
-
-    button.addEventListener('click', () => setSpecialSpot(spot.key));
-
-    wrap.appendChild(button);
-  }
-
-  toggleSpecialPositionInput();
-}
-
-function toggleSpecialPositionInput() {
-  const show = state.specialSelection.areaKey === 'SEGUNDO_PISO' && state.specialSelection.spotKey === 'PISO';
-
-  $('#special-position-wrap').classList.toggle('hidden', !show);
-
-  if (!show) {
-    $('#special-position-input').value = '';
-  }
-}
-
-function renderSpecialProduct(product) {
-  state.specialProduct = product;
-
-  $('#special-product-placeholder').classList.add('hidden');
-  $('#special-product-card').classList.remove('hidden');
-
-  $('#special-name').textContent = product.name;
-  $('#special-sku').textContent = `SKU: ${product.sku}`;
-  $('#special-brand').textContent = `Marca: ${product.brand || brandFromCode(product.sku)}`;
-  $('#special-stock').textContent = product.stock === null || product.stock === undefined ? '—' : product.stock;
-
-  const kind = locationKind(product.location);
-
-  if (kind === 'special') {
-    $('#special-current-location').textContent = `Ubicación actual: ${product.location.fullLabel}`;
-    state.specialSelection.areaKey = product.location.areaKey;
-    state.specialSelection.spotKey = product.location.spotKey;
-    $('#special-position-input').value = product.location.position || '';
-  } else if (kind === 'normal') {
-    $('#special-current-location').textContent = `Ubicación actual: ${product.location.fullLabel}. Si guardas aquí, esta ubicación de bodega se reemplazará.`;
-    state.specialSelection.areaKey = 'PIEZA_1';
-    state.specialSelection.spotKey = 'ESTANTE_1';
-    $('#special-position-input').value = '';
-  } else {
-    $('#special-current-location').textContent = 'Este producto todavía no tiene una ubicación.';
-    state.specialSelection.areaKey = 'PIEZA_1';
-    state.specialSelection.spotKey = 'ESTANTE_1';
-    $('#special-position-input').value = '';
-  }
-
-  $('#delete-special-button').classList.toggle('hidden', !product.location);
-
-  renderSpecialAreaButtons();
-  renderSpecialSpotButtons();
-  syncBrowserWithSpecialSelection();
-}
-
-async function searchSpecialProduct(searchText) {
-  hideMessage($('#special-message'));
-
-  try {
-    const { product } = await api(`/api/products/search?sku=${encodeURIComponent(searchText)}`);
-
-    renderSpecialProduct(product);
-  } catch (error) {
-    state.specialProduct = null;
-    showMessage($('#special-message'), error.message, 'error');
-  }
-}
-
-function syncBrowserWithSpecialSelection() {
-  const areaSelect = $('#browser-area-select');
-  const spotSelect = $('#browser-spot-select');
-
-  if (!areaSelect || !spotSelect) return;
-
-  if (state.specialSelection.areaKey) {
-    areaSelect.value = state.specialSelection.areaKey;
-    populateSpotSelect();
-
-    if (state.specialSelection.spotKey) {
-      spotSelect.value = state.specialSelection.spotKey;
-    }
-  }
-}
-
-async function saveSpecialLocation() {
-  if (!state.specialProduct) return;
-
-  hideMessage($('#special-message'));
-
-  const payload = {
-    areaKey: state.specialSelection.areaKey,
-    spotKey: state.specialSelection.spotKey,
-    position: $('#special-position-input').value,
-    updatedBy: $('#special-updated-by-input').value,
-  };
-
-  try {
-    const result = await api(`/api/products/${encodeURIComponent(state.specialProduct.sku)}/special-location`, {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    });
-
-    state.specialProduct = result.product;
-
-    if (state.searchedProduct?.sku === result.product.sku) {
-      state.searchedProduct = result.product;
-      renderSearchResult(result.product);
-    }
-
-    renderSpecialProduct(result.product);
-
-    showMessage($('#special-message'), `${result.message} ${result.product.location.fullLabel}`, 'success');
-
-    await Promise.all([
-      loadProducts().catch(() => {}),
-      loadSpecialBrowser(),
-    ]);
-  } catch (error) {
-    showMessage($('#special-message'), error.message, 'error');
-  }
-}
-
-async function deleteSpecialLocation() {
-  if (!state.specialProduct) return;
-
-  const accepted = confirm(`¿Quitar la ubicación actual de ${state.specialProduct.sku}?`);
-
-  if (!accepted) return;
-
-  try {
-    const result = await api(`/api/products/${encodeURIComponent(state.specialProduct.sku)}/special-location`, {
-      method: 'DELETE',
-      body: JSON.stringify({
-        updatedBy: $('#special-updated-by-input').value,
-      }),
-    });
-
-    state.specialProduct = result.product;
-
-    if (state.searchedProduct?.sku === result.product.sku) {
-      state.searchedProduct = result.product;
-      renderSearchResult(result.product);
-    }
-
-    renderSpecialProduct(result.product);
-
-    showMessage($('#special-message'), result.message, 'success');
-
-    await Promise.all([
-      loadProducts().catch(() => {}),
-      loadSpecialBrowser(),
-    ]);
-  } catch (error) {
-    showMessage($('#special-message'), error.message, 'error');
-  }
-}
-
-async function loadSpecialBrowser() {
-  const areaSelect = $('#browser-area-select');
-  const spotSelect = $('#browser-spot-select');
-
-  if (!areaSelect || !spotSelect) return;
-
-  const areaKey = areaSelect.value;
-  const spotKey = spotSelect.value;
-
-  const payload = await api(`/api/special-locations?areaKey=${encodeURIComponent(areaKey)}&spotKey=${encodeURIComponent(spotKey)}`);
-
-  $('#special-product-count').textContent = payload.products.length;
-
-  const list = $('#special-browser-list');
-
-  list.innerHTML = '';
-
-  if (!payload.products.length) {
-    list.innerHTML = '<p class="muted">No hay productos en esa ubicación especial.</p>';
-    return;
-  }
-
-  for (const product of payload.products) {
-    const item = document.createElement('button');
-
-    item.type = 'button';
-    item.className = 'browser-item';
-
-    item.innerHTML = `
-      <div>
-        <strong>${escapeHtml(product.name)}</strong>
-        <small>SKU: ${escapeHtml(product.sku)}</small>
-        <small>${escapeHtml(product.location?.fullLabel || 'Sin ubicación')}</small>
-      </div>
-      <span class="stock-chip">${escapeHtml(product.stock ?? '—')}</span>
-    `;
-
-    item.addEventListener('click', () => {
-      renderSpecialProduct(product);
-
-      if (window.matchMedia('(max-width: 860px)').matches) {
-        $('.special-assignment-card').scrollIntoView({
-          behavior: 'smooth',
-          block: 'start',
-        });
-      }
-    });
-
-    list.appendChild(item);
-  }
-}
-
-function openHiddenAdmin() {
-  hideMessage($('#search-message'));
-
-  showView('history');
-
-  $('#history-pin-input').value = '';
-  $('#history-message').className = 'message hidden';
-
-  setTimeout(() => $('#history-pin-input').focus(), 40);
-}
-
-async function loadHistory() {
-  const pin = state.adminPin || $('#history-pin-input').value.trim();
-  const q = $('#history-search').value.trim();
-
-  const payload = await api('/api/admin/history', {
-    method: 'POST',
-    body: JSON.stringify({
-      pin,
-      q,
-      limit: 300,
-    }),
-  });
-
-  state.adminPin = pin;
-  state.historyUnlocked = true;
-
-  $('#history-content').classList.remove('hidden');
-
-  renderHistory(payload.events);
-}
-
-function renderHistory(events) {
-  const list = $('#history-list');
-
-  list.innerHTML = '';
-
-  const actionFilter = $('#history-action-filter')?.value || '';
-
-  const filteredEvents = actionFilter
-    ? events.filter((event) => String(event.action || '').toLowerCase().includes(actionFilter.replaceAll('-', ' ')))
-    : events;
-
-  if (!filteredEvents.length) {
-    list.innerHTML = '<p class="muted">No hay registros para mostrar.</p>';
-    return;
-  }
-
-  for (const event of filteredEvents) {
-    const item = document.createElement('article');
-
-    item.className = 'history-item';
-
-    item.innerHTML = `
-      <div class="history-item-top">
-        <div>
-          <strong>${escapeHtml(event.sku)}</strong>
-          <small>${escapeHtml(event.productName || 'Producto sin nombre')}</small>
-          <small>Modificado por: ${escapeHtml(event.updatedBy || 'Sin identificar')}</small>
-        </div>
-        <span class="history-badge">${escapeHtml(event.action || 'cambio')}</span>
-      </div>
-
-      <small>${escapeHtml(formatDate(event.createdAt))}</small>
-
-      <div class="history-change-grid">
-        <div class="history-change-box">
-          <span>Antes</span>
-          <p>${escapeHtml(event.beforeLabel || 'Sin ubicación')}</p>
-        </div>
-        <div class="history-change-box">
-          <span>Después</span>
-          <p>${escapeHtml(event.afterLabel || 'Sin ubicación')}</p>
-        </div>
-      </div>
-    `;
-
-    list.appendChild(item);
-  }
-}
-
-function debounce(fn, delay) {
-  let timer;
-
-  return (...args) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), delay);
-  };
-}
-
-function setupEvents() {
-  $$('.tab').forEach((button) => {
-    button.addEventListener('click', () => setView(button.dataset.view));
-  });
-
-  $('#search-form').addEventListener('submit', (event) => {
-    event.preventDefault();
-
-    const code = $('#sku-search').value.trim().toUpperCase();
-
-    $('#sku-search').value = code;
-
-    if (!code) {
-      return showMessage($('#search-message'), 'Debes ingresar un SKU o nombre del producto.', 'warning');
-    }
-
-    if (code === 'ADMIN') {
-      $('#sku-search').value = '';
-      openHiddenAdmin();
-      return;
-    }
-
-    searchProduct(code);
-  });
-
-  $('#sku-search').addEventListener('input', (event) => {
-    event.target.value = event.target.value.toUpperCase();
-  });
-
-  $('#admin-search').addEventListener('input', (event) => {
-    const cursor = event.target.selectionStart;
-
-    event.target.value = event.target.value.toUpperCase();
-    event.target.setSelectionRange(cursor, cursor);
-  });
-
-  $('#edit-result-button').addEventListener('click', openSearchedProductEditor);
-
-  $('#assignment-form').addEventListener('submit', (event) => {
-    event.preventDefault();
-    saveLocation();
-  });
-
-  $('#admin-filter').addEventListener('change', async () => {
-    clearSelection();
-    await loadProducts();
-  });
-
-  $('#admin-search').addEventListener('input', debounce(loadProducts, 250));
-  $('#refresh-button').addEventListener('click', loadProducts);
-  $('#sync-button').addEventListener('click', syncRelbase);
-  $('#delete-location-button').addEventListener('click', deleteLocation);
-
-  $('#export-final-button')?.addEventListener('click', async () => {
-  try {
-    await downloadAisleExcel('final');
-  } catch (error) {
-    showMessage($('#admin-message'), error.message, 'error');
-  }
-});
-
-  $('#special-search-form').addEventListener('submit', (event) => {
-    event.preventDefault();
-
-    const code = $('#special-sku-search').value.trim().toUpperCase();
-
-    $('#special-sku-search').value = code;
-
-    if (!code) {
-      return showMessage($('#special-message'), 'Debes ingresar un SKU.', 'warning');
-    }
-
-    searchSpecialProduct(code);
-  });
-
-  $('#special-sku-search').addEventListener('input', (event) => {
-    event.target.value = event.target.value.toUpperCase().replace(/\s+/g, '');
-  });
-
-  $('#save-special-button').addEventListener('click', saveSpecialLocation);
-  $('#delete-special-button').addEventListener('click', deleteSpecialLocation);
-
-  $('#browser-area-select').addEventListener('change', async () => {
-    populateSpotSelect();
-    await loadSpecialBrowser();
-  });
-
-  $('#browser-spot-select').addEventListener('change', loadSpecialBrowser);
-  $('#refresh-special-browser').addEventListener('click', loadSpecialBrowser);
-
-  $('#history-back-button').addEventListener('click', () => setView('search'));
-
-  $('#history-pin-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-
-    hideMessage($('#history-message'));
-
-    try {
-      await loadHistory();
-      showMessage($('#history-message'), 'Historial desbloqueado.', 'success');
-    } catch (error) {
-      state.adminPin = '';
-      state.historyUnlocked = false;
-      $('#history-content').classList.add('hidden');
-      showMessage($('#history-message'), error.message, 'error');
-    }
-  });
-
-  $('#history-search').addEventListener('input', debounce(async () => {
-    if (!state.historyUnlocked) return;
-
-    try {
-      await loadHistory();
-    } catch (error) {
-      showMessage($('#history-message'), error.message, 'error');
-    }
-  }, 250));
-
-  $('#history-action-filter').addEventListener('change', async () => {
-    if (!state.historyUnlocked) return;
-
-    try {
-      await loadHistory();
-    } catch (error) {
-      showMessage($('#history-message'), error.message, 'error');
-    }
-  });
-
-  $('#refresh-history-button').addEventListener('click', async () => {
-    if (!state.historyUnlocked) return;
-
-    try {
-      await loadHistory();
-    } catch (error) {
-      showMessage($('#history-message'), error.message, 'error');
-    }
-  });
-}
-
-setupEvents();
-configureKeyboardFlow();
-loadStatus();
+document.addEventListener('DOMContentLoaded',init);

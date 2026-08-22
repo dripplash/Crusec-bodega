@@ -1,46 +1,88 @@
-# Crusec Bodega — versión Railway
+# KORDIS · Warehouse Management System
 
-Esta es la base de la versión final. Mantiene la interfaz aprobada y separa claramente:
+Versión candidata a producción basada en el último MAIN estable del proyecto.
 
-- **Catálogo**: por ahora productos de demostración; después vendrá desde Relbase en modo solo lectura.
-- **Ubicaciones**: se guardan en `locations.json` en el servidor y son compartidas por PC y celulares.
+## Estructura
 
-## Probar localmente
+La carpeta que debe quedar configurada como **Root Directory** en Railway sigue siendo:
 
-1. Tener Node.js 20 o superior.
-2. Ejecutar `npm start`.
-3. Abrir `http://localhost:3000`.
+`crusec-bodega-railway`
 
-SKUs demo: `C02140`, `P00240`, `Y00120`.
+No es necesario cambiar la URL actual ni recrear el proyecto Railway.
 
-## Railway
+## Funciones incluidas
 
-La app está preparada para Railway. Para que las ubicaciones sobrevivan a reinicios o nuevos deploys, hay que agregar un **Volume** y montarlo en `/data`, luego configurar:
+- Búsqueda por SKU, código de barras o nombre.
+- Stock leído desde Relbase.
+- Stock de la bodega principal usando `product.inventories` y `RELBASE_MAIN_WAREHOUSE_ID`.
+- Asignación de ubicación física:
+  - Pasillo 1–6
+  - Lado izquierdo/derecho
+  - Rack 1–11
+  - Nivel 1–5
+- Ubicaciones especiales.
+- Historial de cambios.
+- Inventario.
+- Exportación Excel real por pasillo con `xlsx`.
+- OAuth de Relbase.
+- Sincronización manual y automática.
+- Barra de progreso de sincronización.
+- Caché persistente de productos.
+- Persistencia en `/data`.
+- Mapa vectorial de racks, nítido en pantallas HD/4K.
+- Perfil simple de usuario KORDIS, sin contraseña, guardado en el navegador.
+- Interfaz responsive para escritorio y móvil.
+- Favicon y app icon KORDIS renovados.
 
-`DATA_DIR=/data`
+## Variables Railway recomendadas
 
-Sin Volume, varios dispositivos verán los mismos cambios mientras el servidor esté vivo, pero un redeploy podría borrar esos cambios.
+```text
+CATALOG_MODE=relbase
+DATA_DIR=/data
+AUTO_SYNC_ENABLED=true
+AUTO_SYNC_ON_START=true
+SYNC_INTERVAL_MINUTES=30
+RELBASE_SAFETY_MAX_PAGES=10000
+RELBASE_MAIN_WAREHOUSE_ID=2881
+```
 
-## Relbase
+OAuth:
 
-Relbase está desactivado intencionalmente. `src/relbase.js` es el único conector que habrá que adaptar cuando tengamos la aplicación API real y confirmemos endpoints/scopes.
+```text
+RELBASE_BASE_URL
+RELBASE_CLIENT_ID
+RELBASE_CLIENT_SECRET
+RELBASE_REDIRECT_URI
+RELBASE_SCOPES
+```
 
-La integración debe ser de **solo lectura**. Las ubicaciones nunca se escriben en Relbase.
+El redirect actual puede mantenerse:
 
-Las credenciales deben configurarse como variables privadas del hosting, nunca dentro de `public/`, GitHub o el código fuente.
+`https://crusec-bodega.up.railway.app/auth/callback`
 
-## Dominio
+Scopes:
 
-Primero se despliega y prueba con la URL temporal de Railway. Al final se crea `bodega.crusec.cl` en DNS apuntando al dominio que entregue Railway.
+```text
+products:read inventory:read warehouses:read
+```
 
-## Historial privado
+## Antes de subir
 
-El historial no aparece como pestaña visible. Para abrirlo, escribe `admin` en el buscador principal.
+1. No borrar el proyecto Railway.
+2. No borrar ni reemplazar manualmente el volumen `/data`.
+3. Mantener `crusec-bodega-railway` como Root Directory.
+4. Verificar que `RELBASE_MAIN_WAREHOUSE_ID=2881` siga configurado.
+5. Después del deploy, revisar `/api/status`.
+6. Si Relbase aparece no autorizado, entrar a `/auth/login`.
+7. Ejecutar una sincronización manual desde KORDIS.
+8. Comparar al menos 5 productos contra Relbase antes de dar la versión por cerrada.
 
-El sistema pedirá un PIN de administrador. En Railway se recomienda configurar:
+## Verificación técnica
 
-`ADMIN_PIN=tu_pin_privado`
+```bash
+npm install
+npm run check
+npm start
+```
 
-Si no se configura `ADMIN_PIN`, la app usa temporalmente `1234`. Cámbialo en Railway antes de dejarlo en uso real.
-
-El historial se guarda en el volumen `/data` en el archivo `history.json`. Registra SKU, nombre del producto, quién hizo el cambio, fecha, ubicación anterior y ubicación nueva.
+El servidor usa Node.js 20 o superior.

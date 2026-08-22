@@ -1,0 +1,16 @@
+{
+  "name": "KORDIS · Warehouse Management System",
+  "short_name": "KORDIS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0b2032",
+  "icons": [
+    {
+      "src": "/assets/kordis-app-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
