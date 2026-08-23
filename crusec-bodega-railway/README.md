@@ -96,3 +96,11 @@ El servidor usa Node.js 20 o superior.
 - La flecha de la ubicación abre directamente el mapa de bodega.
 - El modal del mapa muestra Pasillo, Lado, Rack y Nivel antes del plano.
 
+## Ajustes candidato v4
+
+- Búsqueda predictiva simplificada: muestra una sola vista previa mientras se escribe; al tener el SKU, Enter ejecuta la búsqueda directamente.
+- Tarjeta de ubicación actual reorganizada en Pasillo, Lado, Rack y Nivel; la flecha y el botón abren el mapa.
+- Ubicaciones: se eliminó el corte de 250 registros y se muestran todos los productos ubicados, agrupados por Pasillo 1–6 y ubicaciones especiales.
+- Inventario: se eliminó el corte visual de 300 registros; se muestran todos los productos cargados desde el catálogo sincronizado con Relbase.
+- Se conservan OAuth, sincronización, stock por `RELBASE_MAIN_WAREHOUSE_ID`, persistencia `/data`, Excel y el resto del motor de producción.
+

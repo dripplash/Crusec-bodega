@@ -151,19 +151,36 @@
 
                 <div class="location-card">
                   <div class="location-card-copy">
-                    <span class="section-label">Ubicación actual</span>
+                    <div class="location-card-head">
+                      <span class="section-label">Ubicación actual</span>
+                      <button id="location-chevron-btn" type="button" class="location-chevron-btn" aria-label="Ver esta ubicación en el mapa de bodega" title="Ver en mapa">
+                        <span>Ver mapa</span>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+                      </button>
+                    </div>
                     <div class="location-main">
-                      <svg viewBox="0 0 24 24"><path d="M12 21s6-4.7 6-11a6 6 0 1 0-12 0c0 6.3 6 11 6 11Z"/><circle cx="12" cy="10" r="2"/></svg>
+                      <span class="location-pin">
+                        <svg viewBox="0 0 24 24"><path d="M12 21s6-4.7 6-11a6 6 0 1 0-12 0c0 6.3 6 11 6 11Z"/><circle cx="12" cy="10" r="2"/></svg>
+                      </span>
                       <strong id="location-title">Pasillo 3</strong>
                     </div>
-                    <p id="location-side">Lado derecho</p>
-                    <p id="location-rack">Rack 1&nbsp;&nbsp;·&nbsp;&nbsp;Nivel 1</p>
+                    <div class="location-meta-grid">
+                      <div class="location-meta-item">
+                        <span id="location-side-label">Lado</span>
+                        <strong id="location-side">Derecho</strong>
+                      </div>
+                      <div class="location-meta-item">
+                        <span id="location-rack-label">Rack</span>
+                        <strong id="location-rack">1</strong>
+                      </div>
+                      <div class="location-meta-item">
+                        <span id="location-level-label">Nivel</span>
+                        <strong id="location-level">1</strong>
+                      </div>
+                    </div>
                     <button id="open-map-btn" type="button" class="map-link">
                       <svg viewBox="0 0 24 24"><path d="m3 6 5-2 8 3 5-2v13l-5 2-8-3-5 2z"/><path d="M8 4v13M16 7v13"/></svg>
                       Ver en mapa de bodega
-                    </button>
-                    <button id="location-chevron-btn" type="button" class="location-chevron-btn" aria-label="Ver esta ubicación en el mapa de bodega" title="Ver en mapa">
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
                     </button>
                   </div>
                   <div id="mini-map" class="mini-map"></div>

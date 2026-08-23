@@ -1994,3 +1994,272 @@ body{background:#f5f8fc}
     -webkit-box-orient:vertical;
   }
 }
+
+
+/* =========================================================
+   KORDIS · Pulido final de búsqueda, ubicación y listados
+   ========================================================= */
+
+/* Búsqueda predictiva: una sola vista previa, sin lista que obligue a elegir. */
+.search-suggestion-list{
+  display:none!important;
+}
+.search-suggestions{
+  overflow:hidden;
+}
+.search-preview{
+  border-top:0;
+}
+.search-preview-card{
+  grid-template-columns:minmax(0,1.2fr) minmax(210px,.8fr);
+  gap:16px;
+  padding:13px 14px;
+}
+.search-preview-card.exact{
+  box-shadow:inset 3px 0 0 #1269ed;
+  background:linear-gradient(180deg,#fbfdff,#f3f8ff);
+}
+.search-preview-meta{
+  align-self:stretch;
+  align-content:center;
+}
+.search-preview-hint{
+  grid-column:1/-1;
+  display:block;
+  margin-top:-3px;
+  padding-top:9px;
+  border-top:1px solid #e6edf5;
+  color:#718095;
+  font-size:.59rem;
+  font-weight:650;
+}
+.search-preview-card.exact .search-preview-hint{
+  color:#0d5fdc;
+}
+.search-preview-empty{
+  padding:13px 14px;
+  color:#697a90;
+  font-size:.7rem;
+}
+
+/* Ubicación actual: jerarquía más clara sin alterar la tarjeta general. */
+.location-card{
+  background:linear-gradient(180deg,#fff,#fbfdff);
+}
+.location-card-copy{
+  position:relative;
+  display:block;
+}
+.location-card-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+.location-main{
+  margin:10px 0 11px;
+}
+.location-pin{
+  width:31px;
+  height:31px;
+  flex:none;
+  display:grid;
+  place-items:center;
+  border-radius:9px;
+  background:#edf5ff;
+  color:#0d63ea;
+}
+.location-pin svg{
+  width:18px;
+  height:18px;
+  fill:rgba(13,99,234,.06);
+}
+.location-main strong{
+  color:#142238;
+  font-size:1.16rem;
+  letter-spacing:-.015em;
+}
+.location-meta-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+  margin:0 0 12px 0;
+}
+.location-meta-item{
+  min-width:0;
+  padding:9px 10px;
+  border:1px solid #e0e8f1;
+  border-radius:10px;
+  background:#fff;
+}
+.location-meta-item span{
+  display:block;
+  color:#7a8a9e;
+  font-size:.54rem;
+  font-weight:750;
+  letter-spacing:.045em;
+  text-transform:uppercase;
+}
+.location-meta-item strong{
+  display:block;
+  margin-top:3px;
+  overflow:hidden;
+  color:#253750;
+  font-size:.72rem;
+  font-weight:750;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.location-card .map-link{
+  margin:0;
+}
+.location-chevron-btn{
+  position:static;
+  width:auto;
+  height:34px;
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  padding:0 6px 0 9px;
+  border:0;
+  border-radius:9px;
+  background:transparent;
+  color:#0d63ea;
+  font-size:.61rem;
+  font-weight:750;
+  transform:none;
+}
+.location-chevron-btn span{
+  display:inline;
+}
+.location-chevron-btn svg{
+  width:16px;
+  height:16px;
+}
+.location-chevron-btn:hover,
+.location-chevron-btn:focus-visible{
+  background:#eff6ff;
+  color:#0d5acb;
+  outline:none;
+}
+.location-chevron-btn:active{
+  transform:scale(.97);
+}
+
+/* Todos los pasillos ubicados, sin corte artificial de 250 productos. */
+.location-list-panel .compact-list{
+  max-height:640px;
+}
+.location-group{
+  display:grid;
+  gap:7px;
+}
+.location-group + .location-group{
+  margin-top:12px;
+}
+.location-group-head{
+  position:sticky;
+  top:0;
+  z-index:2;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:8px 9px;
+  border:1px solid #dbe6f2;
+  border-radius:9px;
+  background:rgba(247,250,254,.97);
+  backdrop-filter:blur(6px);
+}
+.location-group-head strong{
+  color:#15345d;
+  font-size:.67rem;
+}
+.location-group-head span{
+  color:#718095;
+  font-size:.56rem;
+}
+.location-group-items{
+  display:grid;
+  gap:7px;
+}
+
+/* Inventario: el catálogo completo de Relbase queda disponible, sin límite visual. */
+#view-inventory .table-wrap{
+  max-height:none;
+}
+
+@media(max-width:860px){
+  .search-preview-card{
+    grid-template-columns:1fr;
+    gap:8px;
+    padding:11px 12px;
+  }
+  .search-preview-meta{
+    display:grid;
+    grid-template-columns:72px minmax(0,1fr);
+    gap:8px;
+    padding:9px 0 0;
+    border-top:1px solid #e6edf5;
+    border-left:0;
+  }
+  .search-preview-meta span{
+    white-space:normal;
+  }
+  .search-preview-hint{
+    margin-top:0;
+  }
+
+  .location-card-copy{
+    padding-right:0!important;
+  }
+  .location-card-head{
+    margin-bottom:2px;
+  }
+  .location-chevron-btn{
+    position:static!important;
+    transform:none!important;
+    width:auto!important;
+    height:34px!important;
+    padding:0 4px 0 8px!important;
+  }
+  .location-chevron-btn:active{
+    transform:scale(.97)!important;
+  }
+  .location-meta-grid{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:6px;
+  }
+  .location-meta-item{
+    padding:8px;
+  }
+  .location-meta-item strong{
+    font-size:.69rem;
+  }
+  .location-card .map-link{
+    width:100%;
+    justify-content:center;
+    min-height:42px;
+  }
+  .location-list-panel .compact-list{
+    max-height:68vh;
+  }
+}
+
+@media(max-width:390px){
+  .location-meta-grid{
+    gap:5px;
+  }
+  .location-meta-item{
+    padding:7px 6px;
+  }
+  .location-meta-item span{
+    font-size:.5rem;
+  }
+  .location-meta-item strong{
+    font-size:.64rem;
+  }
+  .location-chevron-btn span{
+    display:none;
+  }
+}

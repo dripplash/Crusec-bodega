@@ -60,7 +60,6 @@ function mergeProduct(product){
   return i>=0 ? state.products[i] : product;
 }
 
-let searchSuggestionIndex = -1;
 let searchSuggestionProducts = [];
 
 function searchSuggestionScore(product, query){
@@ -96,17 +95,21 @@ function hideSearchSuggestions(){
   const panel=$('#search-suggestions');
   if(panel) panel.classList.add('hidden');
   $('#search-input')?.setAttribute('aria-expanded','false');
-  searchSuggestionIndex=-1;
 }
 
-function searchPreviewMarkup(product){
+function searchPreviewMarkup(product, query=''){
   if(!product) return '';
   const location=product.location?locationLabel(product.location):'Sin ubicación asignada';
   const stock=Number.isFinite(Number(product.stock))?formatNumber(product.stock):'—';
+  const q=String(query||'').trim().toUpperCase();
+  const exact=q && (
+    normalizeSku(product.sku)===normalizeSku(q) ||
+    String(product.barcode||'').trim().toUpperCase()===q
+  );
   return `
-    <div class="search-preview-card">
+    <div class="search-preview-card ${exact?'exact':''}">
       <div class="search-preview-copy">
-        <span class="search-preview-kicker">Vista previa</span>
+        <span class="search-preview-kicker">${exact?'Coincidencia exacta':'Vista previa'}</span>
         <strong>${escapeHtml(product.name||'Producto sin nombre')}</strong>
         <span class="search-preview-sku">SKU: ${escapeHtml(product.sku||'—')}</span>
       </div>
@@ -114,46 +117,19 @@ function searchPreviewMarkup(product){
         <span><b>Stock</b>${escapeHtml(stock)}</span>
         <span><b>Ubicación</b>${escapeHtml(location)}</span>
       </div>
-      <button type="button" class="search-preview-open" data-search-preview-open="${escapeHtml(product.sku||'')}">
-        Ver producto
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
-      </button>
+      <span class="search-preview-hint">${exact?'Presiona Enter para abrir':'Sigue escribiendo hasta encontrar tu SKU'}</span>
     </div>`;
-}
-
-function setSearchSuggestionActive(index, {scroll=true}={}){
-  if(!searchSuggestionProducts.length) return;
-  const max=searchSuggestionProducts.length-1;
-  searchSuggestionIndex=Math.max(0,Math.min(index,max));
-  const rows=$$('[data-search-suggestion]');
-  rows.forEach((row,i)=>{
-    const active=i===searchSuggestionIndex;
-    row.classList.toggle('active',active);
-    row.setAttribute('aria-selected',String(active));
-    if(active && scroll) row.scrollIntoView({block:'nearest'});
-  });
-  const product=searchSuggestionProducts[searchSuggestionIndex];
-  const preview=$('#search-preview');
-  if(preview){
-    preview.innerHTML=searchPreviewMarkup(product);
-    preview.classList.remove('hidden');
-    preview.querySelector('[data-search-preview-open]')?.addEventListener('click',()=>{
-      $('#search-input').value=product.sku;
-      hideSearchSuggestions();
-      searchProduct(product.sku);
-    });
-  }
 }
 
 function renderSearchSuggestions(query){
   const panel=$('#search-suggestions');
   const list=$('#search-suggestion-list');
   const preview=$('#search-preview');
-  if(!panel || !list || !preview) return;
+  if(!panel || !preview) return;
 
   const q=String(query||'').trim();
+  if(list) list.innerHTML='';
   if(!q){
-    list.innerHTML='';
     preview.innerHTML='';
     preview.classList.add('hidden');
     hideSearchSuggestions();
@@ -161,45 +137,20 @@ function renderSearchSuggestions(query){
   }
 
   searchSuggestionProducts=getSearchSuggestions(q);
-  if(!searchSuggestionProducts.length){
-    list.innerHTML=`<div class="search-suggestion-empty">No hay coincidencias en el catálogo sincronizado.</div>`;
-    preview.innerHTML='';
-    preview.classList.add('hidden');
+  const product=searchSuggestionProducts[0]||null;
+
+  if(!product){
+    preview.innerHTML=`<div class="search-preview-empty">No hay coincidencias en el catálogo sincronizado.</div>`;
+    preview.classList.remove('hidden');
     panel.classList.remove('hidden');
     $('#search-input')?.setAttribute('aria-expanded','true');
-    searchSuggestionIndex=-1;
     return;
   }
 
-  list.innerHTML=searchSuggestionProducts.map((product,index)=>`
-    <button type="button" class="search-suggestion-item" role="option"
-      aria-selected="${index===0?'true':'false'}" data-search-suggestion="${escapeHtml(product.sku||'')}">
-      <span class="search-suggestion-copy">
-        <strong>${escapeHtml(product.name||'Producto sin nombre')}</strong>
-        <small><span>SKU</span>${escapeHtml(product.sku||'—')}</small>
-      </span>
-      <span class="search-suggestion-side">
-        <b>${formatNumber(product.stock)}</b>
-        <small>${product.location?'Con ubicación':'Sin ubicación'}</small>
-      </span>
-    </button>`).join('');
-
+  preview.innerHTML=searchPreviewMarkup(product,q);
+  preview.classList.remove('hidden');
   panel.classList.remove('hidden');
   $('#search-input')?.setAttribute('aria-expanded','true');
-  searchSuggestionIndex=0;
-
-  $$('[data-search-suggestion]',list).forEach((row,index)=>{
-    row.addEventListener('mouseenter',()=>setSearchSuggestionActive(index,{scroll:false}));
-    row.addEventListener('focus',()=>setSearchSuggestionActive(index,{scroll:false}));
-    row.addEventListener('click',()=>{
-      const product=searchSuggestionProducts[index];
-      if(!product) return;
-      $('#search-input').value=product.sku;
-      setSearchSuggestionActive(index,{scroll:false});
-    });
-  });
-
-  setSearchSuggestionActive(0,{scroll:false});
 }
 function formatNumber(value){
   const n=Number(value);
@@ -366,27 +317,49 @@ function renderCurrentProduct(){
   const statusText=$('.product-sync-label');
   if(statusText) statusText.textContent=state.status?.relbaseAuthorized?'Producto sincronizado':'Producto del catálogo';
 
+  const sideLabelEl=$('#location-side-label');
+  const rackLabelEl=$('#location-rack-label');
+  const levelLabelEl=$('#location-level-label');
+  const levelEl=$('#location-level');
+
   if(p.location){
     if(locationKind(p.location)==='special'){
       $('#location-title').textContent=p.location.areaLabel||'Ubicación especial';
-      $('#location-side').textContent=p.location.spotLabel||'Zona especial';
-      $('#location-rack').textContent=p.location.position?`Posición ${p.location.position}`:'Ubicación especial';
+      if(sideLabelEl) sideLabelEl.textContent='Lugar';
+      if(rackLabelEl) rackLabelEl.textContent='Tipo';
+      if(levelLabelEl) levelLabelEl.textContent='Posición';
+      $('#location-side').textContent=p.location.spotLabel||p.location.spotKey||'Zona especial';
+      $('#location-rack').textContent='Especial';
+      if(levelEl) levelEl.textContent=p.location.position||'—';
     }else{
       $('#location-title').textContent=`Pasillo ${p.location.aisle}`;
-      $('#location-side').textContent=`Lado ${sideLabel(p.location.side)}`;
-      $('#location-rack').innerHTML=`Rack ${p.location.rack}&nbsp;&nbsp;·&nbsp;&nbsp;Nivel ${p.location.level}`;
+      if(sideLabelEl) sideLabelEl.textContent='Lado';
+      if(rackLabelEl) rackLabelEl.textContent='Rack';
+      if(levelLabelEl) levelLabelEl.textContent='Nivel';
+      $('#location-side').textContent=sideLabel(p.location.side);
+      $('#location-rack').textContent=String(p.location.rack);
+      if(levelEl) levelEl.textContent=String(p.location.level);
     }
   }else{
     $('#location-title').textContent='Sin ubicación';
-    $('#location-side').textContent='Este producto todavía no está asignado';
+    if(sideLabelEl) sideLabelEl.textContent='Estado';
+    if(rackLabelEl) rackLabelEl.textContent='Rack';
+    if(levelLabelEl) levelLabelEl.textContent='Nivel';
+    $('#location-side').textContent='No asignado';
     $('#location-rack').textContent='—';
+    if(levelEl) levelEl.textContent='—';
   }
 
+  const canMap=locationKind(p.location)==='normal';
   const mapChevron=$('#location-chevron-btn');
   if(mapChevron){
-    const canMap=locationKind(p.location)==='normal';
     mapChevron.disabled=!canMap;
     mapChevron.classList.toggle('hidden',!canMap);
+  }
+  const mapButton=$('#open-map-btn');
+  if(mapButton){
+    mapButton.disabled=!canMap;
+    mapButton.classList.toggle('hidden',!canMap);
   }
 
   $('#mini-map').innerHTML=warehouseMapSvg(p,true);
@@ -501,21 +474,62 @@ function renderLocations(){
   const selected=productBySku(state.currentSku)||state.products.find(p=>locationKind(p.location)==='normal');
   $('#full-map').innerHTML=warehouseMapSvg(selected,false);
   const list=$('#location-list');
+
   const items=state.products
     .filter(p=>p.location)
     .sort((a,b)=>{
       const ak=locationKind(a.location), bk=locationKind(b.location);
       if(ak!==bk) return ak==='normal'?-1:1;
-      if(ak==='special') return locationLabel(a.location).localeCompare(locationLabel(b.location));
-      return (a.location.aisle-b.location.aisle)||(a.location.rack-b.location.rack)||(a.location.level-b.location.level);
-    })
-    .slice(0,250);
-  list.innerHTML=items.length?items.map(p=>`
+      if(ak==='special') return locationLabel(a.location).localeCompare(locationLabel(b.location),'es');
+      const sideOrder={I:0,D:1};
+      return (Number(a.location.aisle)-Number(b.location.aisle))
+        || ((sideOrder[String(a.location.side).toUpperCase()]??9)-(sideOrder[String(b.location.side).toUpperCase()]??9))
+        || (Number(a.location.rack)-Number(b.location.rack))
+        || (Number(a.location.level)-Number(b.location.level))
+        || String(a.sku||'').localeCompare(String(b.sku||''),'es');
+    });
+
+  if(!items.length){
+    list.innerHTML='<div class="compact-item"><div><strong>Sin ubicaciones</strong><small>Aún no hay productos ubicados.</small></div></div>';
+    return;
+  }
+
+  const normalGroups=new Map();
+  const special=[];
+  for(const product of items){
+    if(locationKind(product.location)==='normal'){
+      const aisle=Number(product.location.aisle);
+      if(!normalGroups.has(aisle)) normalGroups.set(aisle,[]);
+      normalGroups.get(aisle).push(product);
+    }else{
+      special.push(product);
+    }
+  }
+
+  const renderProduct=(p)=>`
     <button class="compact-item" type="button" data-map-sku="${escapeHtml(p.sku)}">
       <div><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.sku)}</small></div>
       <span class="location-tag">${escapeHtml(shortLocation(p.location))}</span>
-    </button>`).join(''):'<div class="compact-item"><div><strong>Sin ubicaciones</strong><small>Aún no hay productos ubicados.</small></div></div>';
-  $$('[data-map-sku]').forEach(btn=>btn.addEventListener('click',()=>{
+    </button>`;
+
+  let html='';
+  for(let aisle=1;aisle<=6;aisle++){
+    const group=normalGroups.get(aisle)||[];
+    if(!group.length) continue;
+    html+=`<section class="location-group" data-location-group="${aisle}">
+      <div class="location-group-head"><strong>Pasillo ${aisle}</strong><span>${group.length} producto${group.length===1?'':'s'}</span></div>
+      <div class="location-group-items">${group.map(renderProduct).join('')}</div>
+    </section>`;
+  }
+  if(special.length){
+    html+=`<section class="location-group special">
+      <div class="location-group-head"><strong>Ubicaciones especiales</strong><span>${special.length} producto${special.length===1?'':'s'}</span></div>
+      <div class="location-group-items">${special.map(renderProduct).join('')}</div>
+    </section>`;
+  }
+
+  list.innerHTML=html;
+  $$('[data-map-sku]',list).forEach(btn=>btn.addEventListener('click',()=>{
     state.currentSku=btn.dataset.mapSku;
     localStorage.setItem(STORAGE.lastSku,state.currentSku);
     $('#full-map').innerHTML=warehouseMapSvg(productBySku(state.currentSku),false);
@@ -666,7 +680,6 @@ function renderInventory(){
   if(filter==='stock')products=products.filter(p=>p.stock>0);
   if(filter==='assigned')products=products.filter(p=>p.location);
   if(filter==='unassigned')products=products.filter(p=>!p.location);
-  products=products.slice(0,300);
   $('#inventory-body').innerHTML=products.map(p=>`
     <tr>
       <td><strong>${escapeHtml(p.name)}</strong><small>Marca: ${escapeHtml(displayBrand(p))}</small></td>
@@ -945,24 +958,11 @@ function setupEvents(){
     if(e.target.value.trim()) renderSearchSuggestions(e.target.value);
   });
   $('#search-input').addEventListener('keydown',e=>{
-    const panel=$('#search-suggestions');
-    const open=panel && !panel.classList.contains('hidden') && searchSuggestionProducts.length;
-    if(e.key==='ArrowDown' && open){
-      e.preventDefault();
-      setSearchSuggestionActive(searchSuggestionIndex<0?0:searchSuggestionIndex+1);
-    }else if(e.key==='ArrowUp' && open){
-      e.preventDefault();
-      setSearchSuggestionActive(searchSuggestionIndex<=0?searchSuggestionProducts.length-1:searchSuggestionIndex-1);
-    }else if(e.key==='Enter' && open && searchSuggestionIndex>=0){
-      e.preventDefault();
-      const product=searchSuggestionProducts[searchSuggestionIndex];
-      if(product){
-        e.target.value=product.sku;
-        searchProduct(product.sku);
-      }
-    }else if(e.key==='Escape'){
+    if(e.key==='Escape'){
       hideSearchSuggestions();
+      e.target.blur();
     }
+    // Enter no se intercepta: el formulario busca directamente el SKU escrito.
   });
   document.addEventListener('pointerdown',e=>{
     if(!e.target.closest('.search-input')) hideSearchSuggestions();
