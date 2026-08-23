@@ -104,3 +104,16 @@ El servidor usa Node.js 20 o superior.
 - Inventario: se eliminó el corte visual de 300 registros; se muestran todos los productos cargados desde el catálogo sincronizado con Relbase.
 - Se conservan OAuth, sincronización, stock por `RELBASE_MAIN_WAREHOUSE_ID`, persistencia `/data`, Excel y el resto del motor de producción.
 
+
+
+## Candidato v5 — optimización web y móvil
+
+Ajustes de interfaz añadidos sin cambiar el motor de producción:
+
+- Inventario general oculta productos cuyo stock viene `null` o sin informar para mantener la vista limpia.
+- Esos productos siguen apareciendo si el usuario los busca; la búsqueda consulta `/api/products?q=...` para intentar refrescar su stock desde Relbase.
+- Inventario móvil se presenta como tarjetas responsive sin desplazamiento horizontal.
+- Modal del mapa con más margen, mejor altura útil y mayor separación en escritorio y móvil.
+- Excel evita estirarse a la altura completa de la vista previa.
+- Configuración responsive mejorada y nuevos avatares de personas.
+- Optimización visual de listados largos con `content-visibility`.

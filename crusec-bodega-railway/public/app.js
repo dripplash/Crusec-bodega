@@ -673,26 +673,95 @@ async function openSpecialLocationModal(){
   });
 }
 
-function renderInventory(){
-  const q=$('#inventory-search')?.value||'';
-  const filter=$('#inventory-filter')?.value||'all';
-  let products=state.products.filter(p=>matchesProduct(p,q));
-  if(filter==='stock')products=products.filter(p=>p.stock>0);
-  if(filter==='assigned')products=products.filter(p=>p.location);
-  if(filter==='unassigned')products=products.filter(p=>!p.location);
-  $('#inventory-body').innerHTML=products.map(p=>`
+let inventorySearchTimer=null;
+let inventoryRequestSerial=0;
+
+function inventoryStockIsUnknown(product){
+  return product?.stock === null || product?.stock === undefined || product?.stock === '';
+}
+
+function inventoryStockLabel(product){
+  return inventoryStockIsUnknown(product) ? '—' : escapeHtml(product.stock);
+}
+
+function inventoryRows(products){
+  return products.map(p=>`
     <tr>
       <td><strong>${escapeHtml(p.name)}</strong><small>Marca: ${escapeHtml(displayBrand(p))}</small></td>
       <td>${escapeHtml(p.sku)}</td>
-      <td><span class="stock-table">${p.stock}</span></td>
+      <td><span class="stock-table ${inventoryStockIsUnknown(p)?'stock-unknown':''}">${inventoryStockLabel(p)}</span></td>
       <td><span class="${p.location?'assigned':'unassigned'}">${escapeHtml(locationLabel(p.location))}</span></td>
-      <td><button type="button" class="table-action" data-edit-inventory="${p.sku}">Editar</button></td>
+      <td><button type="button" class="table-action" data-edit-inventory="${escapeHtml(p.sku)}">Editar</button></td>
     </tr>`).join('');
+}
+
+function bindInventoryEditButtons(){
   $$('[data-edit-inventory]').forEach(btn=>btn.addEventListener('click',()=>{
     state.assignmentSku=btn.dataset.editInventory;
     selectAssignmentProduct(state.assignmentSku);
     setView('assignments');
   }));
+}
+
+function renderInventory(){
+  const q=$('#inventory-search')?.value.trim()||'';
+  const filter=$('#inventory-filter')?.value||'all';
+  const requestId=++inventoryRequestSerial;
+
+  const applyProducts=(sourceProducts, searched=false)=>{
+    if(requestId!==inventoryRequestSerial)return;
+    let products=[...sourceProducts];
+
+    if(!searched){
+      products=products.filter(p=>matchesProduct(p,q));
+    }
+
+    // La vista general queda limpia: oculta productos cuyo stock viene null/sin informar.
+    // Al buscar explícitamente, esos productos sí aparecen y se consulta Relbase para refrescar su stock.
+    if(!q) products=products.filter(p=>!inventoryStockIsUnknown(p));
+
+    if(filter==='stock')products=products.filter(p=>!inventoryStockIsUnknown(p)&&Number(p.stock)>0);
+    if(filter==='assigned')products=products.filter(p=>p.location);
+    if(filter==='unassigned')products=products.filter(p=>!p.location);
+
+    const body=$('#inventory-body');
+    const count=$('#inventory-count');
+    if(count){
+      count.textContent=q
+        ? `${formatNumber(products.length)} resultado${products.length===1?'':'s'} para “${q}”`
+        : `${formatNumber(products.length)} productos visibles`;
+    }
+
+    if(!products.length){
+      body.innerHTML=`<tr class="inventory-empty-row"><td colspan="5"><strong>Sin resultados</strong><small>${q?'Prueba con otro SKU, nombre o código.':'No hay productos visibles para este filtro.'}</small></td></tr>`;
+      return;
+    }
+
+    body.innerHTML=inventoryRows(products);
+    bindInventoryEditButtons();
+  };
+
+  if(!q){
+    applyProducts(state.products,false);
+    return;
+  }
+
+  // Vista inmediata mientras llega el stock actualizado desde Relbase.
+  applyProducts(state.products.filter(p=>matchesProduct(p,q)),true);
+
+  clearTimeout(inventorySearchTimer);
+  inventorySearchTimer=setTimeout(async()=>{
+    try{
+      const payload=await api(`/api/products?filter=all&q=${encodeURIComponent(q)}`);
+      if(requestId!==inventoryRequestSerial)return;
+      const fresh=Array.isArray(payload.products)?payload.products:[];
+      fresh.forEach(mergeProduct);
+      applyProducts(fresh,true);
+    }catch(error){
+      // Conservamos los resultados locales si Relbase tarda o no responde.
+      console.warn('No se pudo refrescar el stock de inventario:',error);
+    }
+  },220);
 }
 
 function renderExcelPreview(){
@@ -738,7 +807,8 @@ function openMapModal(){
       <div><span>Ubicación</span><strong>${escapeHtml(locationLabel(p.location))}</strong></div>
     </div>`;
 
-  openModal(`<div class="modal-title-row">
+  openModal(`<div class="map-modal-shell">
+    <div class="modal-title-row">
       <div><span class="eyebrow">UBICACIÓN</span><h2>Mapa de bodega</h2></div>
     </div>
     <div class="map-product-context">
@@ -747,7 +817,8 @@ function openMapModal(){
     </div>
     ${locationSummary}
     <div class="modal-map">${warehouseMapSvg(p,false)}</div>
-    <p class="map-help">P1–P6 representan los pasillos. I/D indican el lado izquierdo y derecho. Rack 1 está hacia la entrada y Rack 11 hacia el fondo.</p>`);
+    <p class="map-help">P1–P6 representan los pasillos. I/D indican el lado izquierdo y derecho. Rack 1 está hacia la entrada y Rack 11 hacia el fondo.</p>
+  </div>`);
 }
 async function openHistoryModal(){
   const p=productBySku(state.currentSku); if(!p)return;
@@ -774,7 +845,7 @@ function openDetailsModal(){
       <div class="detail-box"><span>SKU</span><strong>${escapeHtml(p.sku)}</strong></div>
       <div class="detail-box"><span>Código de barras</span><strong>${escapeHtml(p.barcode)}</strong></div>
       <div class="detail-box"><span>Marca</span><strong>${escapeHtml(displayBrand(p))}</strong></div>
-      <div class="detail-box"><span>Stock</span><strong>${p.stock} unidades</strong></div>
+      <div class="detail-box"><span>Stock</span><strong>${inventoryStockIsUnknown(p)?'Sin dato':`${escapeHtml(p.stock)} unidades`}</strong></div>
       <div class="detail-box" style="grid-column:1/-1"><span>Ubicación</span><strong>${escapeHtml(locationLabel(p.location))}</strong></div>
     </div>`);
 }

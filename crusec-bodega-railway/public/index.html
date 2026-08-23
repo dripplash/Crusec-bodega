@@ -337,7 +337,11 @@
                 <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.4-3.4"/></svg>
                 <input id="inventory-search" placeholder="Buscar SKU, nombre o código..." />
               </div>
-              <select id="inventory-filter"><option value="all">Todos</option><option value="stock">Con stock</option><option value="assigned">Con ubicación</option><option value="unassigned">Sin ubicación</option></select>
+              <select id="inventory-filter"><option value="all">Todos visibles</option><option value="stock">Con stock</option><option value="assigned">Con ubicación</option><option value="unassigned">Sin ubicación</option></select>
+            </div>
+            <div class="inventory-info-row">
+              <span id="inventory-count">Cargando productos…</span>
+              <span>Los productos sin stock informado se ocultan de esta vista, pero siguen disponibles al buscarlos.</span>
             </div>
             <div class="table-wrap">
               <table>
@@ -406,6 +410,10 @@
                 <label>Elegir avatar</label>
                 <div id="avatar-options" class="avatar-grid">
                   <button class="avatar-choice selected" type="button" data-avatar-choice="person"><span class="avatar" data-avatar="person"></span><small>Clásico</small></button>
+                  <button class="avatar-choice" type="button" data-avatar-choice="person-blue"><span class="avatar" data-avatar="person-blue"></span><small>Azul</small></button>
+                  <button class="avatar-choice" type="button" data-avatar-choice="person-green"><span class="avatar" data-avatar="person-green"></span><small>Verde</small></button>
+                  <button class="avatar-choice" type="button" data-avatar-choice="person-violet"><span class="avatar" data-avatar="person-violet"></span><small>Violeta</small></button>
+                  <button class="avatar-choice" type="button" data-avatar-choice="person-rose"><span class="avatar" data-avatar="person-rose"></span><small>Rosa</small></button>
                   <button class="avatar-choice" type="button" data-avatar-choice="worker"><span class="avatar" data-avatar="worker"></span><small>Bodega</small></button>
                   <button class="avatar-choice" type="button" data-avatar-choice="box"><span class="avatar" data-avatar="box"></span><small>Inventario</small></button>
                   <button class="avatar-choice" type="button" data-avatar-choice="pin"><span class="avatar" data-avatar="pin"></span><small>Ubicación</small></button>
