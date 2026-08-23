@@ -1,431 +1,483 @@
-<!DOCTYPE html>
-
+<!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport"/>
-<meta content="#0b2032" name="theme-color"/>
-<meta content="KORDIS · Warehouse Management System" name="description"/>
-<title>KORDIS · Warehouse Management System</title>
-<link href="/assets/favicon.svg?v=final" rel="icon" type="image/svg+xml"/>
-<link href="/assets/favicon-32.png?v=final" rel="icon" sizes="32x32" type="image/png"/>
-<link href="/assets/favicon-16.png?v=final" rel="icon" sizes="16x16" type="image/png"/>
-<link href="/assets/apple-touch-icon.png?v=final" rel="apple-touch-icon" sizes="180x180"/>
-<link href="/manifest.webmanifest?v=final" rel="manifest"/>
-<meta content="yes" name="apple-mobile-web-app-capable"/>
-<meta content="default" name="apple-mobile-web-app-status-bar-style"/>
-<link href="/styles.css" rel="stylesheet"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b2032" />
+  <meta name="description" content="KORDIS · Warehouse Management System" />
+  <title>KORDIS · Warehouse Management System</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=final" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=final" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png?v=final" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png?v=final" />
+  <link rel="manifest" href="/manifest.webmanifest?v=final" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-<a class="skip-link" href="#main">Saltar al contenido</a>
-<div class="app">
-<aside class="sidebar" id="sidebar">
-<div aria-label="KORDIS Warehouse Management System" class="sidebar-brand"><button aria-label="Ir al inicio" class="sidebar-home-btn" id="sidebar-home-btn" type="button"><img alt="KORDIS Warehouse Management System" class="sidebar-logo-clean" src="/assets/kordis-logo-sidebar-clean.png"/></button></div>
-<nav aria-label="Navegación principal" class="sidebar-nav">
-<button class="nav-link active" data-view="search" type="button">
-<svg viewbox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.4-3.4"></path></svg><span>Buscar</span>
-</button>
-<button class="nav-link" data-view="locations" type="button">
-<svg viewbox="0 0 24 24"><path d="M12 21s6-4.7 6-11a6 6 0 1 0-12 0c0 6.3 6 11 6 11Z"></path><circle cx="12" cy="10" r="2"></circle></svg><span>Ubicaciones</span>
-</button>
-<button class="nav-link" data-view="assignments" type="button">
-<svg viewbox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"></path><path d="M9 10h6M9 14h6M9 18h4"></path></svg><span>Asignaciones</span>
-</button>
-<button class="nav-link" data-view="inventory" type="button">
-<svg viewbox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"></path><path d="m4.5 7.8 7.5 4.3 7.5-4.3M12 12v9"></path></svg><span>Inventario</span>
-</button>
-<button class="nav-link" data-view="excel" type="button">
-<svg viewbox="0 0 24 24"><path d="M12 3v12"></path><path d="m7 11 5 5 5-5"></path><path d="M5 21h14"></path></svg><span>Exportar Excel</span>
-</button>
-<div class="nav-divider"></div>
-<button class="nav-link" data-view="sync" type="button">
-<svg viewbox="0 0 24 24"><path d="M20 7h-5V2"></path><path d="M4 17h5v5"></path><path d="M5.5 9a7 7 0 0 1 11.9-3L20 8"></path><path d="M18.5 15a7 7 0 0 1-11.9 3L4 16"></path></svg><span>Sincronización</span>
-</button>
-<button class="nav-link" data-view="settings" type="button">
-<svg viewbox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"></path><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"></path></svg><span>Configuración</span>
-</button>
-</nav>
-<div aria-label="DRIDT · Web &amp; App Development" class="sidebar-company">
-<img alt="DRIDT · Web &amp; App Development" class="dridt-logo-sidebar" src="/assets/dridt-logo-sidebar.png"/>
-</div>
-</aside>
-<section class="workspace">
-<header class="topbar">
-<div class="mobile-brand-lockup"><button aria-label="Ir al inicio" class="brand-home-btn" id="brand-home-btn" type="button"><img alt="KORDIS Warehouse Management System" src="/assets/kordis-logo-clean.png"/></button></div>
-<button aria-label="Abrir o contraer menú" class="square-btn" id="menu-btn" type="button">
-<svg viewbox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
-</button>
-<div class="topbar-spacer"></div>
-<button aria-label="Notificaciones" class="mobile-notification-btn" type="button">
-<svg viewbox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path></svg>
-</button>
-<button aria-expanded="false" class="profile-btn" id="profile-btn" type="button">
-<span class="avatar current-avatar" data-avatar="avatar-1"></span>
-<span id="header-user-name">Juan Pérez</span>
-<svg class="chevron" viewbox="0 0 24 24"><path d="m8 10 4 4 4-4"></path></svg>
-</button>
-<div class="profile-popover hidden" id="profile-popover">
-<div class="profile-popover-head">
-<span class="avatar current-avatar" data-avatar="avatar-1"></span>
-<div><strong id="profile-popover-name">Juan Pérez</strong><small>Perfil KORDIS</small></div>
-</div>
-<button data-profile-action="settings" type="button">Editar perfil</button>
-<button data-profile-action="change" type="button">Cambiar nombre</button>
-</div>
-</header>
-<main class="main" id="main">
-<!-- BUSCAR -->
-<section class="view active" id="view-search">
-<div class="hero-heading">
-<h1>Hola, <span id="welcome-name">Juan</span></h1>
-<p>Busca un producto y gestiona sus ubicaciones en la bodega.</p>
-</div>
-<div class="search-layout">
-<div class="search-main">
-<form class="search-bar" id="search-form">
-<div class="search-input">
-<svg viewbox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.4-3.4"></path></svg>
-<input aria-autocomplete="list" aria-controls="search-suggestions" aria-expanded="false" autocomplete="off" id="search-input" placeholder="Buscar por SKU, código de barras o nombre de producto..." role="combobox" spellcheck="false"/>
-<div aria-label="Sugerencias de productos" class="search-suggestions hidden" id="search-suggestions" role="listbox">
-<div class="search-suggestion-list" id="search-suggestion-list"></div>
-<div aria-live="polite" class="search-preview hidden" id="search-preview"></div>
-</div>
-</div>
-<button class="btn btn-primary" type="submit">
-<svg viewbox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.4-3.4"></path></svg><span>Buscar</span>
-</button>
-<button class="btn btn-outline scan-btn" id="scan-btn" type="button">
-<svg viewbox="0 0 24 24"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4"></path><path d="M8 8h8v8H8z"></path></svg><span>Escanear código</span>
-</button>
-</form>
-<div class="example-row">
-<span>Ejemplos:</span>
-<button data-example="ANDADORBB46CM" type="button">ANDADORBB46CM</button>
-</div>
-<div class="inline-message hidden" id="search-message"></div>
-<article class="product-card" id="product-card">
-<div class="product-info">
-<div aria-label="Espacio reservado para imagen del producto" class="product-placeholder product-image-frame">
-<svg aria-hidden="true" viewbox="0 0 24 24">
-<rect height="16" rx="2" width="18" x="3" y="4"></rect>
-<circle cx="9" cy="10" r="1.5"></circle>
-<path d="m5 18 5-5 3 3 2-2 4 4"></path>
-</svg>
-</div>
-<div class="product-copy">
-<h2 id="product-name">Nuevo Andador Para Bebés Musical Multifuncional 46 Cm</h2>
-<div class="product-sku-row">
-<span class="sku-pill">SKU</span>
-<strong id="product-sku">ANDADORBB46CM</strong>
-<span aria-hidden="true" class="product-status-dot"></span>
-<span class="product-sync-label">Producto sincronizado</span>
-</div>
-<p class="brand" id="product-brand">Marca: Crusec</p>
-<div class="stock-row">
-<span class="stock-badge">Stock disponible</span>
-<strong id="product-stock">221</strong><small>unidades</small>
-</div>
-</div>
-</div>
-<div class="location-card">
-<div class="location-card-copy">
-<div class="location-card-head">
-<span class="section-label">Ubicación actual</span>
-<button aria-label="Ver esta ubicación en el mapa de bodega" class="location-chevron-btn" id="location-chevron-btn" title="Ver en mapa" type="button">
-<span>Ver mapa</span>
-<svg aria-hidden="true" viewbox="0 0 24 24"><path d="m9 6 6 6-6 6"></path></svg>
-</button>
-</div>
-<div class="location-main">
-<span class="location-pin">
-<svg viewbox="0 0 24 24"><path d="M12 21s6-4.7 6-11a6 6 0 1 0-12 0c0 6.3 6 11 6 11Z"></path><circle cx="12" cy="10" r="2"></circle></svg>
-</span>
-<strong id="location-title">Pasillo 3</strong>
-</div>
-<div class="location-meta-grid">
-<div class="location-meta-item">
-<span id="location-side-label">Lado</span>
-<strong id="location-side">Derecho</strong>
-</div>
-<div class="location-meta-item">
-<span id="location-rack-label">Rack</span>
-<strong id="location-rack">1</strong>
-</div>
-<div class="location-meta-item">
-<span id="location-level-label">Nivel</span>
-<strong id="location-level">1</strong>
-</div>
-</div>
-<button class="map-link" id="open-map-btn" type="button">
-<svg viewbox="0 0 24 24"><path d="m3 6 5-2 8 3 5-2v13l-5 2-8-3-5 2z"></path><path d="M8 4v13M16 7v13"></path></svg>
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand" aria-label="KORDIS Warehouse Management System">
+        <img class="sidebar-logo-clean" src="/assets/kordis-logo-sidebar-clean.png" alt="KORDIS Warehouse Management System" />
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Navegación principal">
+        <button class="nav-link active" data-view="search" type="button">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.4-3.4"/></svg><span>Buscar</span>
+        </button>
+        <button class="nav-link" data-view="locations" type="button">
+          <svg viewBox="0 0 24 24"><path d="M12 21s6-4.7 6-11a6 6 0 1 0-12 0c0 6.3 6 11 6 11Z"/><circle cx="12" cy="10" r="2"/></svg><span>Ubicaciones</span>
+        </button>
+        <button class="nav-link" data-view="assignments" type="button">
+          <svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M9 10h6M9 14h6M9 18h4"/></svg><span>Asignaciones</span>
+        </button>
+        <button class="nav-link" data-view="inventory" type="button">
+          <svg viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4.5 7.8 7.5 4.3 7.5-4.3M12 12v9"/></svg><span>Inventario</span>
+        </button>
+        <button class="nav-link" data-view="excel" type="button">
+          <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg><span>Exportar Excel</span>
+        </button>
+
+        <div class="nav-divider"></div>
+
+        <button class="nav-link" data-view="sync" type="button">
+          <svg viewBox="0 0 24 24"><path d="M20 7h-5V2"/><path d="M4 17h5v5"/><path d="M5.5 9a7 7 0 0 1 11.9-3L20 8"/><path d="M18.5 15a7 7 0 0 1-11.9 3L4 16"/></svg><span>Sincronización</span>
+        </button>
+        <button class="nav-link" data-view="settings" type="button">
+          <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg><span>Configuración</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-company" aria-label="DRIDT · Web & App Development">
+        <img class="dridt-logo-sidebar" src="/assets/dridt-logo-sidebar.png" alt="DRIDT · Web & App Development" />
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <header class="topbar">
+        <div class="mobile-brand-lockup">
+          <img src="/assets/kordis-logo-clean.png" alt="KORDIS Warehouse Management System" />
+        </div>
+
+        <button id="menu-btn" class="square-btn" type="button" aria-label="Abrir o contraer menú">
+          <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+
+        <div class="topbar-spacer"></div>
+
+        <button class="mobile-notification-btn" type="button" aria-label="Notificaciones">
+          <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
+        </button>
+
+        <button id="profile-btn" class="profile-btn" type="button" aria-expanded="false">
+          <span class="avatar current-avatar" data-avatar="person"></span>
+          <span id="header-user-name">Juan Pérez</span>
+          <svg class="chevron" viewBox="0 0 24 24"><path d="m8 10 4 4 4-4"/></svg>
+        </button>
+        <div id="profile-popover" class="profile-popover hidden">
+          <div class="profile-popover-head">
+            <span class="avatar current-avatar" data-avatar="person"></span>
+            <div><strong id="profile-popover-name">Juan Pérez</strong><small>Perfil KORDIS</small></div>
+          </div>
+          <button data-profile-action="settings" type="button">Editar perfil</button>
+          <button data-profile-action="change" type="button">Cambiar nombre</button>
+        </div>
+      </header>
+
+      <main id="main" class="main">
+        <!-- BUSCAR -->
+        <section class="view active" id="view-search">
+          <div class="hero-heading">
+            <h1>Hola, <span id="welcome-name">Juan</span></h1>
+            <p>Busca un producto y gestiona sus ubicaciones en la bodega.</p>
+          </div>
+
+          <div class="search-layout">
+            <div class="search-main">
+              <form id="search-form" class="search-bar">
+                <div class="search-input">
+                  <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.4-3.4"/></svg>
+                  <input id="search-input" autocomplete="off" spellcheck="false"
+                    role="combobox" aria-autocomplete="list" aria-controls="search-suggestions"
+                    aria-expanded="false" placeholder="Buscar por SKU, código de barras o nombre de producto..." />
+                  <div id="search-suggestions" class="search-suggestions hidden" role="listbox" aria-label="Sugerencias de productos">
+                    <div id="search-suggestion-list" class="search-suggestion-list"></div>
+                    <div id="search-preview" class="search-preview hidden" aria-live="polite"></div>
+                  </div>
+                </div>
+                <button class="btn btn-primary" type="submit">
+                  <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.4-3.4"/></svg><span>Buscar</span>
+                </button>
+                <button id="scan-btn" class="btn btn-outline scan-btn" type="button">
+                  <svg viewBox="0 0 24 24"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4"/><path d="M8 8h8v8H8z"/></svg><span>Escanear código</span>
+                </button>
+              </form>
+
+              <div class="example-row">
+                <span>Ejemplos:</span>
+                <button type="button" data-example="ANDADORBB46CM">ANDADORBB46CM</button>
+
+              </div>
+
+              <div id="search-message" class="inline-message hidden"></div>
+
+              <article id="product-card" class="product-card">
+                <div class="product-info">
+                  <div class="product-placeholder product-image-frame" aria-label="Espacio reservado para imagen del producto">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <rect x="3" y="4" width="18" height="16" rx="2"/>
+                      <circle cx="9" cy="10" r="1.5"/>
+                      <path d="m5 18 5-5 3 3 2-2 4 4"/>
+                    </svg>
+                  </div>
+                  <div class="product-copy">
+                    <h2 id="product-name">Nuevo Andador Para Bebés Musical Multifuncional 46 Cm</h2>
+                    <div class="product-sku-row">
+                      <span class="sku-pill">SKU</span>
+                      <strong id="product-sku">ANDADORBB46CM</strong>
+                      <span class="product-status-dot" aria-hidden="true"></span>
+                      <span class="product-sync-label">Producto sincronizado</span>
+                    </div>
+                    <p class="brand" id="product-brand">Marca: Crusec</p>
+                    <div class="stock-row">
+                      <span class="stock-badge">Stock disponible</span>
+                      <strong id="product-stock">221</strong><small>unidades</small>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="location-card">
+                  <div class="location-card-copy">
+                    <div class="location-card-head">
+                      <span class="section-label">Ubicación actual</span>
+                      <button id="location-chevron-btn" type="button" class="location-chevron-btn" aria-label="Ver esta ubicación en el mapa de bodega" title="Ver en mapa">
+                        <span>Ver mapa</span>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+                      </button>
+                    </div>
+                    <div class="location-main">
+                      <span class="location-pin">
+                        <svg viewBox="0 0 24 24"><path d="M12 21s6-4.7 6-11a6 6 0 1 0-12 0c0 6.3 6 11 6 11Z"/><circle cx="12" cy="10" r="2"/></svg>
+                      </span>
+                      <strong id="location-title">Pasillo 3</strong>
+                    </div>
+                    <div class="location-meta-grid">
+                      <div class="location-meta-item">
+                        <span id="location-side-label">Lado</span>
+                        <strong id="location-side">Derecho</strong>
+                      </div>
+                      <div class="location-meta-item">
+                        <span id="location-rack-label">Rack</span>
+                        <strong id="location-rack">1</strong>
+                      </div>
+                      <div class="location-meta-item">
+                        <span id="location-level-label">Nivel</span>
+                        <strong id="location-level">1</strong>
+                      </div>
+                    </div>
+                    <button id="open-map-btn" type="button" class="map-link">
+                      <svg viewBox="0 0 24 24"><path d="m3 6 5-2 8 3 5-2v13l-5 2-8-3-5 2z"/><path d="M8 4v13M16 7v13"/></svg>
                       Ver en mapa de bodega
                     </button>
-</div>
-<div class="mini-map" id="mini-map"></div>
-</div>
-</article>
-<div class="product-actions">
-<button class="btn btn-primary action-btn" id="edit-location-btn" type="button">
-<svg viewbox="0 0 24 24"><path d="m4 20 4.2-1 10-10-3.2-3.2-10 10z"></path><path d="m13.8 7 3.2 3.2"></path></svg><span>Asignar ubicación</span>
-</button>
-<button class="btn btn-outline action-btn" id="history-btn" type="button">
-<svg viewbox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path><path d="M12 7v5l3 2"></path></svg><span>Historial</span>
-</button>
-<button class="btn btn-outline action-btn" id="details-btn" type="button">
-<svg viewbox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path><circle cx="12" cy="12" r="2.6"></circle></svg><span>Ver detalles</span>
-</button>
-<button class="btn btn-outline action-btn mobile-only-action" id="mobile-excel-action" type="button">
-<svg viewbox="0 0 24 24"><path d="M7 3h8l4 4v14H7z"></path><path d="M14 3v5h5M10 12h6M10 16h6"></path></svg><span>Exportar Excel</span>
-</button>
-</div>
-<section aria-label="Mapa de bodega" class="mobile-map-card">
-<div class="mobile-map-head">
-<strong>Mapa de bodega</strong>
-<button id="mobile-open-map" type="button">Ver mapa completo <span>›</span></button>
-</div>
-<div class="mobile-map-preview" id="mobile-map"></div>
-</section>
-</div>
-<aside class="summary">
-<h3>Resumen rápido</h3>
-<div class="summary-stat">
-<span class="summary-icon blue"><svg viewbox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"></path><path d="m4.5 7.8 7.5 4.3 7.5-4.3M12 12v9"></path></svg></span>
-<div><small>Productos sincronizados</small><strong><span id="summary-products">—</span> <em>únicos</em></strong></div>
-</div>
-<div class="summary-stat">
-<span class="summary-icon green"><svg viewbox="0 0 24 24"><path d="M12 21s6-4.7 6-11a6 6 0 1 0-12 0c0 6.3 6 11 6 11Z"></path><circle cx="12" cy="10" r="2"></circle></svg></span>
-<div><small>Ubicaciones asignadas</small><strong id="summary-assigned">2.876 <em>productos</em></strong></div>
-</div>
-<div class="summary-stat">
-<span class="summary-icon gray"><svg viewbox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="m8 12 2.5 2.5L16 9"></path></svg></span>
-<div><small>Sincronización automática</small><strong id="summary-sync-interval">—</strong><em class="active-status" id="summary-sync-state">Comprobando</em></div>
-</div>
-<button class="btn btn-primary summary-sync" data-view-jump="sync" type="button">
-<svg viewbox="0 0 24 24"><path d="M20 7h-5V2"></path><path d="M4 17h5v5"></path><path d="M5.5 9a7 7 0 0 1 11.9-3L20 8"></path><path d="M18.5 15a7 7 0 0 1-11.9 3L4 16"></path></svg>Sincronizar ahora
+                  </div>
+                  <div id="mini-map" class="mini-map"></div>
+                </div>
+              </article>
+
+              <div class="product-actions">
+                <button id="edit-location-btn" class="btn btn-primary action-btn" type="button">
+                  <svg viewBox="0 0 24 24"><path d="m4 20 4.2-1 10-10-3.2-3.2-10 10z"/><path d="m13.8 7 3.2 3.2"/></svg><span>Asignar ubicación</span>
+                </button>
+                <button id="history-btn" class="btn btn-outline action-btn" type="button">
+                  <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg><span>Historial</span>
+                </button>
+                <button id="details-btn" class="btn btn-outline action-btn" type="button">
+                  <svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.6"/></svg><span>Ver detalles</span>
+                </button>
+                <button id="mobile-excel-action" class="btn btn-outline action-btn mobile-only-action" type="button">
+                  <svg viewBox="0 0 24 24"><path d="M7 3h8l4 4v14H7z"/><path d="M14 3v5h5M10 12h6M10 16h6"/></svg><span>Exportar Excel</span>
+                </button>
+              </div>
+
+              <section class="mobile-map-card" aria-label="Mapa de bodega">
+                <div class="mobile-map-head">
+                  <strong>Mapa de bodega</strong>
+                  <button id="mobile-open-map" type="button">Ver mapa completo <span>›</span></button>
+                </div>
+                <div id="mobile-map" class="mobile-map-preview"></div>
+              </section>
+            </div>
+
+            <aside class="summary">
+              <h3>Resumen rápido</h3>
+              <div class="summary-stat">
+                <span class="summary-icon blue"><svg viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4.5 7.8 7.5 4.3 7.5-4.3M12 12v9"/></svg></span>
+                <div><small>Productos sincronizados</small><strong><span id="summary-products">—</span> <em>únicos</em></strong></div>
+              </div>
+              <div class="summary-stat">
+                <span class="summary-icon green"><svg viewBox="0 0 24 24"><path d="M12 21s6-4.7 6-11a6 6 0 1 0-12 0c0 6.3 6 11 6 11Z"/><circle cx="12" cy="10" r="2"/></svg></span>
+                <div><small>Ubicaciones asignadas</small><strong id="summary-assigned">2.876 <em>productos</em></strong></div>
+              </div>
+              <div class="summary-stat">
+                <span class="summary-icon gray"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></svg></span>
+                <div><small>Sincronización automática</small><strong id="summary-sync-interval">—</strong><em id="summary-sync-state" class="active-status">Comprobando</em></div>
+              </div>
+              <button class="btn btn-primary summary-sync" data-view-jump="sync" type="button">
+                <svg viewBox="0 0 24 24"><path d="M20 7h-5V2"/><path d="M4 17h5v5"/><path d="M5.5 9a7 7 0 0 1 11.9-3L20 8"/><path d="M18.5 15a7 7 0 0 1-11.9 3L4 16"/></svg>Sincronizar ahora
               </button>
-</aside>
-</div>
-<section class="quick-section">
-<h3>Acciones rápidas</h3>
-<div class="quick-grid">
-<button class="quick-card" data-view-jump="search" type="button">
-<span class="quick-icon blue"><svg viewbox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.4-3.4"></path></svg></span>
-<strong>Buscar producto</strong><small>Encuentra cualquier producto por SKU, código o nombre.</small>
-</button>
-<button class="quick-card" data-view-jump="locations" type="button">
-<span class="quick-icon green"><svg viewbox="0 0 24 24"><path d="M12 21s6-4.7 6-11a6 6 0 1 0-12 0c0 6.3 6 11 6 11Z"></path><circle cx="12" cy="10" r="2"></circle></svg></span>
-<strong>Gestionar ubicaciones</strong><small>Visualiza, asigna o modifica ubicaciones en la bodega.</small>
-</button>
-<button class="quick-card" data-view-jump="excel" type="button">
-<span class="quick-icon amber"><svg viewbox="0 0 24 24"><path d="M7 3h8l4 4v14H7z"></path><path d="M14 3v5h5M10 12h6M10 16h6"></path></svg></span>
-<strong>Exportar Excel</strong><small>Descarga el listado de ubicaciones por pasillo en Excel.</small>
-</button>
-<button class="quick-card" data-view-jump="sync" type="button">
-<span class="quick-icon purple"><svg viewbox="0 0 24 24"><path d="M20 7h-5V2"></path><path d="M4 17h5v5"></path><path d="M5.5 9a7 7 0 0 1 11.9-3L20 8"></path><path d="M18.5 15a7 7 0 0 1-11.9 3L4 16"></path></svg></span>
-<strong>Sincronizar con Relbase</strong><small>Obtén los últimos productos y stock actualizado.</small>
-</button>
-</div>
-</section>
-</section>
-<!-- UBICACIONES -->
-<section class="view" id="view-locations">
-<div class="page-head">
-<div><span class="eyebrow">UBICACIONES</span><h1>Mapa de bodega</h1><p>Vista superior de la zona de racks. Selecciona un producto para ver exactamente dónde está.</p></div>
-<button class="btn btn-primary" data-view-jump="assignments" type="button">Asignar ubicación</button>
-</div>
-<div class="map-page-grid">
-<section class="panel warehouse-panel">
-<div class="panel-head">
-<div><h2>Vista superior</h2><p>Distribución de Pasillos 1–6, lado izquierdo/derecho y racks 1–11.</p></div>
-<div class="map-legend"><span><i class="legend-dot blue"></i> Producto</span><span><i class="legend-dot rack"></i> Rack</span></div>
-</div>
-<div class="full-map" id="full-map"></div>
-</section>
-<aside class="panel location-list-panel">
-<div class="panel-head"><div><h2>Productos ubicados</h2><p>Selecciona uno para resaltarlo.</p></div></div>
-<div class="compact-list" id="location-list"></div>
-</aside>
-</div>
-</section>
-<!-- ASIGNACIONES -->
-<section class="view" id="view-assignments">
-<div class="page-head">
-<div><span class="eyebrow">ASIGNACIONES</span><h1>Asignar o editar ubicación</h1><p>La forma de ingresar la ubicación se mantiene con botones, pero más ordenada.</p></div>
-</div>
-<div class="assignment-layout">
-<section class="panel product-picker">
-<div class="field with-icon">
-<svg viewbox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.4-3.4"></path></svg>
-<input id="assignment-search" placeholder="Buscar SKU o producto..."/>
-</div>
-<div class="product-picker-list" id="assignment-product-list"></div>
-</section>
-<section class="panel assignment-editor">
-<div class="assignment-product-head">
-<div>
-<span class="sku-pill">SKU</span>
-<h2 id="assign-sku">ANDADORBB46CM</h2>
-<p id="assign-name">Nuevo Andador Para Bebés Musical Multifuncional 46 Cm</p>
-</div>
-<div class="stock-mini"><span>Stock</span><strong id="assign-stock">221</strong></div>
-</div>
-<div class="step">
-<div class="step-title"><span>1</span><div><strong>Pasillo</strong><small>Selecciona del 1 al 6</small></div></div>
-<div class="choice-grid six" id="aisle-options"></div>
-</div>
-<div class="step">
-<div class="step-title"><span>2</span><div><strong>Lado</strong><small>Izquierdo o derecho</small></div></div>
-<div class="choice-grid two" id="side-options"></div>
-</div>
-<div class="step">
-<div class="step-title"><span>3</span><div><strong>Rack</strong><small>Selecciona del 1 al 11</small></div></div>
-<div class="choice-grid eleven" id="rack-options"></div>
-</div>
-<div class="step">
-<div class="step-title"><span>4</span><div><strong>Nivel</strong><small>Selecciona del 1 al 5</small></div></div>
-<div class="choice-grid five" id="level-options"></div>
-</div>
-<div class="assignment-footer">
-<div class="assignment-preview" id="assignment-preview"></div>
-<div class="assignment-button-row">
-<button class="btn btn-primary" id="save-assignment-btn" type="button">Guardar ubicación</button>
-<button class="btn btn-outline" id="special-location-btn" type="button">Ubicación especial</button>
-<button class="btn btn-outline danger-soft hidden" id="delete-location-btn" type="button">Quitar ubicación</button>
-</div>
-</div>
-</section>
-</div>
-</section>
-<!-- INVENTARIO -->
-<section class="view" id="view-inventory">
-<div class="page-head">
-<div><span class="eyebrow">INVENTARIO</span><h1>Inventario</h1><p>Stock y ubicación en una vista rápida y limpia.</p></div>
-</div>
-<section class="panel inventory-panel">
-<div class="inventory-toolbar">
-<div class="field with-icon grow">
-<svg viewbox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.4-3.4"></path></svg>
-<input id="inventory-search" placeholder="Buscar SKU, nombre o código..."/>
-</div>
-<select id="inventory-filter"><option value="all">Todos visibles</option><option value="stock">Con stock</option><option value="assigned">Con ubicación</option><option value="unassigned">Sin ubicación</option></select>
-</div>
-<div class="inventory-info-row">
-<span id="inventory-count">Cargando productos…</span>
-<span>Los productos sin stock informado se ocultan de esta vista, pero siguen disponibles al buscarlos.</span>
-</div>
-<div class="table-wrap">
-<table>
-<thead><tr><th>Producto</th><th>SKU</th><th>Stock</th><th>Ubicación</th><th></th></tr></thead>
-<tbody id="inventory-body"></tbody>
-</table>
-</div>
-</section>
-</section>
-<!-- EXCEL -->
-<section class="view" id="view-excel">
-<div class="page-head">
-<div><span class="eyebrow">EXCEL</span><h1>Exportar ubicaciones</h1><p>Genera un listado ordenado por recorrido para revisar o imprimir.</p></div>
-</div>
-<div class="excel-grid">
-<section class="panel excel-card">
-<span class="excel-big-icon"><svg viewbox="0 0 24 24"><path d="M7 3h8l4 4v14H7z"></path><path d="M14 3v5h5M10 12h6M10 16h6"></path></svg></span>
-<div><h2>Excel por pasillo</h2><p>Lado izquierdo primero, rack y nivel ascendente; luego lado derecho.</p></div>
-<label>Selecciona pasillo
-                <select id="excel-aisle"><option value="1">Pasillo 1</option><option value="2">Pasillo 2</option><option selected="" value="3">Pasillo 3</option><option value="4">Pasillo 4</option><option value="5">Pasillo 5</option><option value="6">Pasillo 6</option></select>
-</label>
-<button class="btn btn-primary" id="download-excel-btn" type="button">Descargar Excel</button>
-</section>
-<section class="panel excel-preview">
-<div class="panel-head"><div><h2>Vista previa</h2><p id="excel-preview-count">Productos del Pasillo 3</p></div></div>
-<div class="compact-list" id="excel-preview-list"></div>
-</section>
-</div>
-</section>
-<!-- SYNC -->
-<section class="view" id="view-sync">
-<div class="page-head">
-<div><span class="eyebrow">SINCRONIZACIÓN</span><h1>Sincronización con Relbase</h1><p>Consulta el estado de OAuth y actualiza productos y stock desde la bodega principal configurada.</p></div>
-</div>
-<section class="panel sync-panel">
-<div class="sync-status-icon"><svg viewbox="0 0 24 24"><path d="M20 7h-5V2"></path><path d="M4 17h5v5"></path><path d="M5.5 9a7 7 0 0 1 11.9-3L20 8"></path><path d="M18.5 15a7 7 0 0 1-11.9 3L4 16"></path></svg></div>
-<div class="sync-copy"><h2 id="relbase-status-title">Comprobando Relbase…</h2><p id="last-sync-label">Cargando estado de sincronización…</p><small id="relbase-status-detail">OAuth · productos · stock de bodega principal</small></div>
-<div class="sync-action-stack">
-<a class="btn btn-outline hidden" href="/auth/login" id="relbase-connect-btn">Conectar Relbase</a>
-<button class="btn btn-primary" id="sync-now-btn" type="button">Sincronizar ahora</button>
-</div>
-<div class="sync-progress hidden" id="sync-progress"><div><span id="sync-progress-label">Preparando...</span><strong id="sync-progress-percent">0%</strong></div><div class="progress-track"><i id="sync-progress-fill"></i></div></div>
-</section>
-</section>
-<!-- CONFIGURACIÓN -->
-<section class="view" id="view-settings">
-<div class="page-head">
-<div><span class="eyebrow">CONFIGURACIÓN</span><h1>Tu perfil</h1><p>Edita tu nombre y elige el avatar que quieras usar en KORDIS.</p></div>
-</div>
-<div class="settings-grid">
-<section class="panel profile-card">
-<div class="profile-preview">
-<span class="avatar avatar-xl current-avatar" data-avatar="avatar-1" id="settings-avatar-preview"></span>
-<div><span class="section-label">PERFIL KORDIS</span><h2 id="settings-preview-name">Juan Pérez</h2><p>Los cambios de ubicación quedarán asociados a este nombre.</p></div>
-</div>
-<div class="settings-field">
-<label for="settings-name">Nombre</label>
-<input id="settings-name" maxlength="50" placeholder="Tu nombre"/>
-</div>
-<div class="settings-field">
-<label>Elegir avatar</label>
-<div class="avatar-grid" id="avatar-options"><button class="avatar-choice selected" data-avatar-choice="avatar-1" type="button"><span class="avatar" data-avatar="avatar-1"></span><small>Operador</small></button><button class="avatar-choice" data-avatar-choice="avatar-2" type="button"><span class="avatar" data-avatar="avatar-2"></span><small>Coordinadora</small></button><button class="avatar-choice" data-avatar-choice="avatar-3" type="button"><span class="avatar" data-avatar="avatar-3"></span><small>Supervisor</small></button><button class="avatar-choice" data-avatar-choice="avatar-4" type="button"><span class="avatar" data-avatar="avatar-4"></span><small>Auxiliar</small></button><button class="avatar-choice" data-avatar-choice="avatar-5" type="button"><span class="avatar" data-avatar="avatar-5"></span><small>Técnico</small></button><button class="avatar-choice" data-avatar-choice="avatar-6" type="button"><span class="avatar" data-avatar="avatar-6"></span><small>Analista</small></button><button class="avatar-choice" data-avatar-choice="avatar-7" type="button"><span class="avatar" data-avatar="avatar-7"></span><small>Picker</small></button><button class="avatar-choice" data-avatar-choice="avatar-8" type="button"><span class="avatar" data-avatar="avatar-8"></span><small>Logística</small></button></div>
-</div>
-<div class="settings-actions">
-<button class="btn btn-primary" id="save-profile-btn" type="button">Guardar cambios</button>
-<span class="saved-note hidden" id="settings-saved">Cambios guardados</span>
-</div>
-</section>
-<aside class="panel settings-note">
-<img alt="KORDIS Warehouse Management System" src="/assets/kordis-logo-clean.png"/>
-<h3>Perfil simple</h3>
-<p>KORDIS usa tu nombre local para identificar quién realizó cada cambio de ubicación.</p>
-</aside>
-</div>
-</section>
-</main>
-<footer class="footer">
-<span>© 2026 DRIDT · KORDIS Warehouse Management System</span>
-<span>Versión final candidata · Railway + Relbase</span>
-</footer>
-</section>
-</div>
-<!-- MOBILE: solo aparece en Android / pantallas pequeñas -->
-<nav aria-label="Navegación móvil" class="mobile-bottom-nav">
-<button class="mobile-nav-item active" data-mobile-view="search" type="button">
-<svg viewbox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.4-3.4"></path></svg><span>Buscar</span>
-</button>
-<button class="mobile-nav-item" data-mobile-view="locations" type="button">
-<svg viewbox="0 0 24 24"><path d="M12 21s6-4.7 6-11a6 6 0 1 0-12 0c0 6.3 6 11 6 11Z"></path><circle cx="12" cy="10" r="2"></circle></svg><span>Ubicaciones</span>
-</button>
-<button aria-label="Exportar Excel" class="mobile-nav-item excel-center" data-mobile-view="excel" type="button">
-<span class="excel-fab"><svg viewbox="0 0 24 24"><path d="M12 3v12"></path><path d="m7 11 5 5 5-5"></path><path d="M5 21h14"></path></svg></span><span>Excel</span>
-</button>
-<button class="mobile-nav-item" data-mobile-view="inventory" type="button">
-<svg viewbox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"></path><path d="m4.5 7.8 7.5 4.3 7.5-4.3M12 12v9"></path></svg><span>Inventario</span>
-</button>
-<button class="mobile-nav-item" data-mobile-view="settings" type="button">
-<svg viewbox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"></path><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"></path></svg><span>Configuración</span>
-</button>
-</nav>
-<!-- Drawer móvil para funciones que no caben en la barra inferior -->
-<div class="drawer-backdrop hidden" id="mobile-drawer-backdrop"></div>
-<aside class="mobile-drawer hidden" id="mobile-drawer">
-<div class="drawer-brand"><div class="drawer-lockup"><img alt="" src="/assets/kordis-mark.png"/><div><strong>KORDIS</strong><span>Warehouse Management System</span></div></div><button class="square-btn" id="drawer-close" type="button">×</button></div>
-<button data-drawer-view="assignments" type="button"><span>Asignaciones</span><b>›</b></button>
-<button data-drawer-view="sync" type="button"><span>Sincronización</span><b>›</b></button>
-</aside>
-<!-- Modal -->
-<div class="modal-backdrop hidden" id="modal-backdrop">
-<section aria-modal="true" class="modal" id="modal" role="dialog">
-<button aria-label="Cerrar" class="modal-close" id="modal-close" type="button">×</button>
-<div id="modal-content"></div>
-</section>
-</div>
-<script defer="" src="/app.js"></script>
+            </aside>
+          </div>
+
+          <section class="quick-section">
+            <h3>Acciones rápidas</h3>
+            <div class="quick-grid">
+              <button class="quick-card" type="button" data-view-jump="search">
+                <span class="quick-icon blue"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.4-3.4"/></svg></span>
+                <strong>Buscar producto</strong><small>Encuentra cualquier producto por SKU, código o nombre.</small>
+              </button>
+              <button class="quick-card" type="button" data-view-jump="locations">
+                <span class="quick-icon green"><svg viewBox="0 0 24 24"><path d="M12 21s6-4.7 6-11a6 6 0 1 0-12 0c0 6.3 6 11 6 11Z"/><circle cx="12" cy="10" r="2"/></svg></span>
+                <strong>Gestionar ubicaciones</strong><small>Visualiza, asigna o modifica ubicaciones en la bodega.</small>
+              </button>
+              <button class="quick-card" type="button" data-view-jump="excel">
+                <span class="quick-icon amber"><svg viewBox="0 0 24 24"><path d="M7 3h8l4 4v14H7z"/><path d="M14 3v5h5M10 12h6M10 16h6"/></svg></span>
+                <strong>Exportar Excel</strong><small>Descarga el listado de ubicaciones por pasillo en Excel.</small>
+              </button>
+              <button class="quick-card" type="button" data-view-jump="sync">
+                <span class="quick-icon purple"><svg viewBox="0 0 24 24"><path d="M20 7h-5V2"/><path d="M4 17h5v5"/><path d="M5.5 9a7 7 0 0 1 11.9-3L20 8"/><path d="M18.5 15a7 7 0 0 1-11.9 3L4 16"/></svg></span>
+                <strong>Sincronizar con Relbase</strong><small>Obtén los últimos productos y stock actualizado.</small>
+              </button>
+            </div>
+          </section>
+        </section>
+
+        <!-- UBICACIONES -->
+        <section class="view" id="view-locations">
+          <div class="page-head">
+            <div><span class="eyebrow">UBICACIONES</span><h1>Mapa de bodega</h1><p>Vista superior de la zona de racks. Selecciona un producto para ver exactamente dónde está.</p></div>
+            <button class="btn btn-primary" data-view-jump="assignments" type="button">Asignar ubicación</button>
+          </div>
+          <div class="map-page-grid">
+            <section class="panel warehouse-panel">
+              <div class="panel-head">
+                <div><h2>Vista superior</h2><p>Distribución de Pasillos 1–6, lado izquierdo/derecho y racks 1–11.</p></div>
+                <div class="map-legend"><span><i class="legend-dot blue"></i> Producto</span><span><i class="legend-dot rack"></i> Rack</span></div>
+              </div>
+              <div id="full-map" class="full-map"></div>
+            </section>
+            <aside class="panel location-list-panel">
+              <div class="panel-head"><div><h2>Productos ubicados</h2><p>Selecciona uno para resaltarlo.</p></div></div>
+              <div id="location-list" class="compact-list"></div>
+            </aside>
+          </div>
+        </section>
+
+        <!-- ASIGNACIONES -->
+        <section class="view" id="view-assignments">
+          <div class="page-head">
+            <div><span class="eyebrow">ASIGNACIONES</span><h1>Asignar o editar ubicación</h1><p>La forma de ingresar la ubicación se mantiene con botones, pero más ordenada.</p></div>
+          </div>
+          <div class="assignment-layout">
+            <section class="panel product-picker">
+              <div class="field with-icon">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.4-3.4"/></svg>
+                <input id="assignment-search" placeholder="Buscar SKU o producto..." />
+              </div>
+              <div id="assignment-product-list" class="product-picker-list"></div>
+            </section>
+            <section class="panel assignment-editor">
+              <div class="assignment-product-head">
+                <div>
+                  <span class="sku-pill">SKU</span>
+                  <h2 id="assign-sku">ANDADORBB46CM</h2>
+                  <p id="assign-name">Nuevo Andador Para Bebés Musical Multifuncional 46 Cm</p>
+                </div>
+                <div class="stock-mini"><span>Stock</span><strong id="assign-stock">221</strong></div>
+              </div>
+
+              <div class="step">
+                <div class="step-title"><span>1</span><div><strong>Pasillo</strong><small>Selecciona del 1 al 6</small></div></div>
+                <div id="aisle-options" class="choice-grid six"></div>
+              </div>
+              <div class="step">
+                <div class="step-title"><span>2</span><div><strong>Lado</strong><small>Izquierdo o derecho</small></div></div>
+                <div id="side-options" class="choice-grid two"></div>
+              </div>
+              <div class="step">
+                <div class="step-title"><span>3</span><div><strong>Rack</strong><small>Selecciona del 1 al 11</small></div></div>
+                <div id="rack-options" class="choice-grid eleven"></div>
+              </div>
+              <div class="step">
+                <div class="step-title"><span>4</span><div><strong>Nivel</strong><small>Selecciona del 1 al 5</small></div></div>
+                <div id="level-options" class="choice-grid five"></div>
+              </div>
+              <div class="assignment-footer">
+                <div id="assignment-preview" class="assignment-preview"></div>
+                <div class="assignment-button-row">
+                  <button id="save-assignment-btn" class="btn btn-primary" type="button">Guardar ubicación</button>
+                  <button id="special-location-btn" class="btn btn-outline" type="button">Ubicación especial</button>
+                  <button id="delete-location-btn" class="btn btn-outline danger-soft hidden" type="button">Quitar ubicación</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <!-- INVENTARIO -->
+        <section class="view" id="view-inventory">
+          <div class="page-head">
+            <div><span class="eyebrow">INVENTARIO</span><h1>Inventario</h1><p>Stock y ubicación en una vista rápida y limpia.</p></div>
+          </div>
+          <section class="panel inventory-panel">
+            <div class="inventory-toolbar">
+              <div class="field with-icon grow">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.4-3.4"/></svg>
+                <input id="inventory-search" placeholder="Buscar SKU, nombre o código..." />
+              </div>
+              <select id="inventory-filter"><option value="all">Todos visibles</option><option value="stock">Con stock</option><option value="assigned">Con ubicación</option><option value="unassigned">Sin ubicación</option></select>
+            </div>
+            <div class="inventory-info-row">
+              <span id="inventory-count">Cargando productos…</span>
+              <span>Los productos sin stock informado se ocultan de esta vista, pero siguen disponibles al buscarlos.</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Producto</th><th>SKU</th><th>Stock</th><th>Ubicación</th><th></th></tr></thead>
+                <tbody id="inventory-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <!-- EXCEL -->
+        <section class="view" id="view-excel">
+          <div class="page-head">
+            <div><span class="eyebrow">EXCEL</span><h1>Exportar ubicaciones</h1><p>Genera un listado ordenado por recorrido para revisar o imprimir.</p></div>
+          </div>
+          <div class="excel-grid">
+            <section class="panel excel-card">
+              <span class="excel-big-icon"><svg viewBox="0 0 24 24"><path d="M7 3h8l4 4v14H7z"/><path d="M14 3v5h5M10 12h6M10 16h6"/></svg></span>
+              <div><h2>Excel por pasillo</h2><p>Lado izquierdo primero, rack y nivel ascendente; luego lado derecho.</p></div>
+              <label>Selecciona pasillo
+                <select id="excel-aisle"><option value="1">Pasillo 1</option><option value="2">Pasillo 2</option><option value="3" selected>Pasillo 3</option><option value="4">Pasillo 4</option><option value="5">Pasillo 5</option><option value="6">Pasillo 6</option></select>
+              </label>
+              <button id="download-excel-btn" class="btn btn-primary" type="button">Descargar Excel</button>
+            </section>
+            <section class="panel excel-preview">
+              <div class="panel-head"><div><h2>Vista previa</h2><p id="excel-preview-count">Productos del Pasillo 3</p></div></div>
+              <div id="excel-preview-list" class="compact-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <!-- SYNC -->
+        <section class="view" id="view-sync">
+          <div class="page-head">
+            <div><span class="eyebrow">SINCRONIZACIÓN</span><h1>Sincronización con Relbase</h1><p>Consulta el estado de OAuth y actualiza productos y stock desde la bodega principal configurada.</p></div>
+          </div>
+          <section class="panel sync-panel">
+            <div class="sync-status-icon"><svg viewBox="0 0 24 24"><path d="M20 7h-5V2"/><path d="M4 17h5v5"/><path d="M5.5 9a7 7 0 0 1 11.9-3L20 8"/><path d="M18.5 15a7 7 0 0 1-11.9 3L4 16"/></svg></div>
+            <div class="sync-copy"><h2 id="relbase-status-title">Comprobando Relbase…</h2><p id="last-sync-label">Cargando estado de sincronización…</p><small id="relbase-status-detail">OAuth · productos · stock de bodega principal</small></div>
+            <div class="sync-action-stack">
+              <a id="relbase-connect-btn" class="btn btn-outline hidden" href="/auth/login">Conectar Relbase</a>
+              <button id="sync-now-btn" class="btn btn-primary" type="button">Sincronizar ahora</button>
+            </div>
+            <div id="sync-progress" class="sync-progress hidden"><div><span id="sync-progress-label">Preparando...</span><strong id="sync-progress-percent">0%</strong></div><div class="progress-track"><i id="sync-progress-fill"></i></div></div>
+          </section>
+        </section>
+
+        <!-- CONFIGURACIÓN -->
+        <section class="view" id="view-settings">
+          <div class="page-head">
+            <div><span class="eyebrow">CONFIGURACIÓN</span><h1>Tu perfil</h1><p>Edita tu nombre y elige el avatar que quieras usar en KORDIS.</p></div>
+          </div>
+          <div class="settings-grid">
+            <section class="panel profile-card">
+              <div class="profile-preview">
+                <span id="settings-avatar-preview" class="avatar avatar-xl current-avatar" data-avatar="person"></span>
+                <div><span class="section-label">PERFIL KORDIS</span><h2 id="settings-preview-name">Juan Pérez</h2><p>Los cambios de ubicación quedarán asociados a este nombre.</p></div>
+              </div>
+
+              <div class="settings-field">
+                <label for="settings-name">Nombre</label>
+                <input id="settings-name" maxlength="50" placeholder="Tu nombre" />
+              </div>
+
+              <div class="settings-field">
+                <label>Elegir avatar</label>
+                <div id="avatar-options" class="avatar-grid">
+                  <button class="avatar-choice selected" type="button" data-avatar-choice="person"><span class="avatar" data-avatar="person"></span><small>Clásico</small></button>
+                  <button class="avatar-choice" type="button" data-avatar-choice="person-blue"><span class="avatar" data-avatar="person-blue"></span><small>Azul</small></button>
+                  <button class="avatar-choice" type="button" data-avatar-choice="person-green"><span class="avatar" data-avatar="person-green"></span><small>Verde</small></button>
+                  <button class="avatar-choice" type="button" data-avatar-choice="person-violet"><span class="avatar" data-avatar="person-violet"></span><small>Violeta</small></button>
+                  <button class="avatar-choice" type="button" data-avatar-choice="person-rose"><span class="avatar" data-avatar="person-rose"></span><small>Rosa</small></button>
+                  <button class="avatar-choice" type="button" data-avatar-choice="worker"><span class="avatar" data-avatar="worker"></span><small>Bodega</small></button>
+                  <button class="avatar-choice" type="button" data-avatar-choice="box"><span class="avatar" data-avatar="box"></span><small>Inventario</small></button>
+                  <button class="avatar-choice" type="button" data-avatar-choice="pin"><span class="avatar" data-avatar="pin"></span><small>Ubicación</small></button>
+                  <button class="avatar-choice" type="button" data-avatar-choice="rack"><span class="avatar" data-avatar="rack"></span><small>Rack</small></button>
+                  <button class="avatar-choice" type="button" data-avatar-choice="initial"><span class="avatar" data-avatar="initial"></span><small>Inicial</small></button>
+                </div>
+              </div>
+
+              <div class="settings-actions">
+                <button id="save-profile-btn" class="btn btn-primary" type="button">Guardar cambios</button>
+                <span id="settings-saved" class="saved-note hidden">Cambios guardados</span>
+              </div>
+            </section>
+            <aside class="panel settings-note">
+              <img src="/assets/kordis-logo-clean.png" alt="KORDIS Warehouse Management System" />
+              <h3>Perfil simple</h3>
+              <p>KORDIS usa tu nombre local para identificar quién realizó cada cambio de ubicación.</p>
+            </aside>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <span>© 2026 DRIDT · KORDIS Warehouse Management System</span>
+        <span>Versión final candidata · Railway + Relbase</span>
+      </footer>
+    </section>
+  </div>
+
+  <!-- MOBILE: solo aparece en Android / pantallas pequeñas -->
+  <nav class="mobile-bottom-nav" aria-label="Navegación móvil">
+    <button class="mobile-nav-item active" type="button" data-mobile-view="search">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.4-3.4"/></svg><span>Buscar</span>
+    </button>
+    <button class="mobile-nav-item" type="button" data-mobile-view="locations">
+      <svg viewBox="0 0 24 24"><path d="M12 21s6-4.7 6-11a6 6 0 1 0-12 0c0 6.3 6 11 6 11Z"/><circle cx="12" cy="10" r="2"/></svg><span>Ubicaciones</span>
+    </button>
+    <button class="mobile-nav-item excel-center" type="button" data-mobile-view="excel" aria-label="Exportar Excel">
+      <span class="excel-fab"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg></span><span>Excel</span>
+    </button>
+    <button class="mobile-nav-item" type="button" data-mobile-view="inventory">
+      <svg viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4.5 7.8 7.5 4.3 7.5-4.3M12 12v9"/></svg><span>Inventario</span>
+    </button>
+    <button class="mobile-nav-item" type="button" data-mobile-view="settings">
+      <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg><span>Configuración</span>
+    </button>
+  </nav>
+
+  <!-- Drawer móvil para funciones que no caben en la barra inferior -->
+  <div id="mobile-drawer-backdrop" class="drawer-backdrop hidden"></div>
+  <aside id="mobile-drawer" class="mobile-drawer hidden">
+    <div class="drawer-brand"><div class="drawer-lockup"><img src="/assets/kordis-mark.png" alt=""><div><strong>KORDIS</strong><span>Warehouse Management System</span></div></div><button id="drawer-close" class="square-btn" type="button">×</button></div>
+    <button type="button" data-drawer-view="assignments"><span>Asignaciones</span><b>›</b></button>
+    <button type="button" data-drawer-view="sync"><span>Sincronización</span><b>›</b></button>
+  </aside>
+
+  <!-- Modal -->
+  <div id="modal-backdrop" class="modal-backdrop hidden">
+    <section id="modal" class="modal" role="dialog" aria-modal="true">
+      <button id="modal-close" class="modal-close" type="button" aria-label="Cerrar">×</button>
+      <div id="modal-content"></div>
+    </section>
+  </div>
+
+  <script src="/app.js" defer></script>
 </body>
 </html>
