@@ -7,7 +7,7 @@ const STORAGE = {
 };
 
 const state = {
-  profile:{name:'Usuario', avatar:'person'},
+  profile:{name:'Usuario', avatar:'avatar-1'},
   hasProfile:false,
   products:[],
   currentSku:null,
@@ -1116,3 +1116,99 @@ async function init(){
 }
 
 document.addEventListener('DOMContentLoaded',init);
+
+
+/* ==== KORDIS v6 runtime polish ==== */
+(function(){
+  const LEGACY_AVATARS = {
+    'person':'avatar-1',
+    'person-blue':'avatar-2',
+    'person-green':'avatar-4',
+    'person-violet':'avatar-6',
+    'person-rose':'avatar-5',
+    'warehouse':'avatar-3',
+    'inventory':'avatar-7',
+    'location':'avatar-4',
+    'rack':'avatar-8',
+    'initial':'avatar-1'
+  };
+  const normalizeAvatar = (value) => LEGACY_AVATARS[value] || value || 'avatar-1';
+
+  const _applyProfile = typeof applyProfile === 'function' ? applyProfile : null;
+  if(_applyProfile){
+    applyProfile = function(){
+      if(state && state.profile){
+        state.profile.avatar = normalizeAvatar(state.profile.avatar);
+      }
+      _applyProfile();
+      const settingsName = document.querySelector('#settings-name');
+      if(settingsName && !settingsName.value && state?.profile?.name){
+        settingsName.value = state.profile.name;
+      }
+      document.querySelectorAll('.current-avatar').forEach(el=>{
+        el.dataset.avatar = normalizeAvatar(state.profile?.avatar);
+      });
+      document.querySelectorAll('.avatar-choice').forEach(btn=>{
+        btn.classList.toggle('selected', btn.dataset.avatarChoice === normalizeAvatar(state.profile?.avatar));
+      });
+      const preview = document.querySelector('#settings-preview-name');
+      if(preview && state?.profile?.name) preview.textContent = state.profile.name;
+    }
+  }
+
+  const _saveProfile = typeof saveProfile === 'function' ? saveProfile : null;
+  if(_saveProfile){
+    saveProfile = function(){
+      if(state && state.profile){
+        state.profile.avatar = normalizeAvatar(state.profile.avatar);
+      }
+      _saveProfile();
+      if(state && state.profile){
+        state.profile.avatar = normalizeAvatar(state.profile.avatar);
+        localStorage.setItem(STORAGE.profile, JSON.stringify(state.profile));
+      }
+    }
+  }
+
+  const _openMapModal = typeof openMapModal === 'function' ? openMapModal : null;
+  if(_openMapModal){
+    openMapModal = function(){
+      _openMapModal();
+      const modal = document.querySelector('#modal-content');
+      if(modal){
+        modal.querySelectorAll('.map-visual svg').forEach(svg=>{
+          if(window.matchMedia('(max-width: 768px)').matches){
+            svg.style.minWidth = '740px';
+            svg.style.height = 'auto';
+          }
+        });
+      }
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    if(state && state.profile){
+      state.profile.avatar = normalizeAvatar(state.profile.avatar);
+    }
+    try{ applyProfile(); }catch(e){}
+
+    const goHome = (ev) => {
+      ev.preventDefault();
+      try { setView('search'); } catch(e) {}
+      try {
+        document.querySelector('#search-input')?.focus({preventScroll:true});
+      } catch(e) {}
+      try {
+        document.querySelector('.workspace')?.scrollTo({top:0, behavior:'smooth'});
+      } catch(e) {}
+      try { closeDrawer(); } catch(e) {}
+    };
+    document.querySelector('#brand-home-btn')?.addEventListener('click', goHome);
+    document.querySelector('#sidebar-home-btn')?.addEventListener('click', goHome);
+
+    // profile button hidden on narrow screens -> use menu/settings for profile.
+    if(window.matchMedia('(max-width: 540px)').matches){
+      document.querySelector('#profile-btn')?.classList.add('hidden');
+    }
+  });
+})();

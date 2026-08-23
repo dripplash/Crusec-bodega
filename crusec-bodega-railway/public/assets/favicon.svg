@@ -1,16 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect x="2" y="2" width="60" height="60" rx="14" fill="#ffffff" stroke="#d9e3ee" stroke-width="2"/>
-  <path d="M15 28V20L32 9l17 11v8" fill="none" stroke="#146ef5" stroke-width="5.2" stroke-linecap="square" stroke-linejoin="miter"/>
-  <path d="M18 46 32 56l14-10" fill="none" stroke="#146ef5" stroke-width="5.2" stroke-linecap="square" stroke-linejoin="miter"/>
-  <g fill="#182536">
-    <rect x="20" y="24" width="24" height="4.8" rx="1.2"/>
-    <rect x="20" y="31.5" width="24" height="4.8" rx="1.2"/>
-    <rect x="20" y="39" width="24" height="4.8" rx="1.2"/>
-    <rect x="18" y="23" width="4.5" height="6.8" rx=".8"/>
-    <rect x="41.5" y="23" width="4.5" height="6.8" rx=".8"/>
-    <rect x="18" y="30.5" width="4.5" height="6.8" rx=".8"/>
-    <rect x="41.5" y="30.5" width="4.5" height="6.8" rx=".8"/>
-    <rect x="18" y="38" width="4.5" height="6.8" rx=".8"/>
-    <rect x="41.5" y="38" width="4.5" height="6.8" rx=".8"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="KORDIS">
+  <rect x="6" y="6" width="116" height="116" rx="26" fill="#ffffff"/>
+  <path d="M33 84V47l31-22 31 22v37" fill="none" stroke="#195fd8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M44 53h40M44 68h40M44 83h40" fill="none" stroke="#14263b" stroke-width="9" stroke-linecap="square"/>
+  <path d="M50 47v12M78 47v12M50 62v12M78 62v12M50 77v12M78 77v12" fill="none" stroke="#14263b" stroke-width="6" stroke-linecap="square"/>
+  <path d="M64 106 34 84" fill="none" stroke="#195fd8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M64 106 94 84" fill="none" stroke="#195fd8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
