@@ -1,27 +1,27 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0b2032" />
-  <meta name="description" content="KORDIS · Warehouse Management System" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b2032">
+  <meta name="description" content="KORDIS · Warehouse Management System">
   <title>KORDIS · Warehouse Management System</title>
-  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=final" />
-  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=final" />
-  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png?v=final" />
-  <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png?v=final" />
-  <link rel="manifest" href="/manifest.webmanifest?v=final" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=final">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=final">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png?v=final">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png?v=final">
+  <link rel="manifest" href="/manifest.webmanifest?v=final">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <a class="skip-link" href="#main">Saltar al contenido</a>
 
   <div class="app">
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-brand" aria-label="KORDIS Warehouse Management System">
-        <img class="sidebar-logo-clean" src="/assets/kordis-logo-sidebar-clean.png" alt="KORDIS Warehouse Management System" />
+    <aside class="sidebar" id="sidebar" aria-label="Barra lateral">
+      <div class="sidebar-brand">
+        <img class="sidebar-logo-clean" src="/assets/kordis-logo-sidebar-clean.png" alt="KORDIS Warehouse Management System">
       </div>
 
       <nav class="sidebar-nav" aria-label="Navegación principal">
@@ -51,15 +51,15 @@
         </button>
       </nav>
 
-      <div class="sidebar-company" aria-label="DRIDT · Web & App Development">
-        <img class="dridt-logo-sidebar" src="/assets/dridt-logo-sidebar.png" alt="DRIDT · Web & App Development" />
+      <div class="sidebar-company">
+        <img class="dridt-logo-sidebar" src="/assets/dridt-logo-sidebar.png" alt="DRIDT · Web & App Development">
       </div>
     </aside>
 
     <section class="workspace">
       <header class="topbar">
         <div class="mobile-brand-lockup">
-          <img src="/assets/kordis-logo-clean.png" alt="KORDIS Warehouse Management System" />
+          <img src="/assets/kordis-logo-clean.png" alt="KORDIS Warehouse Management System">
         </div>
 
         <button id="menu-btn" class="square-btn" type="button" aria-label="Abrir o contraer menú">
@@ -100,9 +100,9 @@
               <form id="search-form" class="search-bar">
                 <div class="search-input">
                   <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.4-3.4"/></svg>
-                  <input id="search-input" autocomplete="off" spellcheck="false"
+                  <input id="search-input" type="search" autocomplete="off" spellcheck="false"
                     role="combobox" aria-autocomplete="list" aria-controls="search-suggestions"
-                    aria-expanded="false" placeholder="Buscar por SKU, código de barras o nombre de producto..." />
+                    aria-expanded="false" placeholder="Buscar por SKU, código de barras o nombre de producto...">
                   <div id="search-suggestions" class="search-suggestions hidden" role="listbox" aria-label="Sugerencias de productos">
                     <div id="search-suggestion-list" class="search-suggestion-list"></div>
                     <div id="search-preview" class="search-preview hidden" aria-live="polite"></div>
@@ -126,7 +126,7 @@
 
               <article id="product-card" class="product-card">
                 <div class="product-info">
-                  <div class="product-placeholder product-image-frame" aria-label="Espacio reservado para imagen del producto">
+                  <div class="product-placeholder product-image-frame" role="img" aria-label="Espacio reservado para imagen del producto">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <rect x="3" y="4" width="18" height="16" rx="2"/>
                       <circle cx="9" cy="10" r="1.5"/>
@@ -211,7 +211,7 @@
               </section>
             </div>
 
-            <aside class="summary">
+            <aside class="summary" aria-label="Resumen rápido">
               <h3>Resumen rápido</h3>
               <div class="summary-stat">
                 <span class="summary-icon blue"><svg viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4.5 7.8 7.5 4.3 7.5-4.3M12 12v9"/></svg></span>
@@ -268,7 +268,7 @@
               </div>
               <div id="full-map" class="full-map"></div>
             </section>
-            <aside class="panel location-list-panel">
+            <aside class="panel location-list-panel" aria-label="Productos ubicados">
               <div class="panel-head"><div><h2>Productos ubicados</h2><p>Selecciona uno para resaltarlo.</p></div></div>
               <div id="location-list" class="compact-list"></div>
             </aside>
@@ -284,7 +284,7 @@
             <section class="panel product-picker">
               <div class="field with-icon">
                 <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.4-3.4"/></svg>
-                <input id="assignment-search" placeholder="Buscar SKU o producto..." />
+                <input id="assignment-search" type="search" placeholder="Buscar SKU o producto...">
               </div>
               <div id="assignment-product-list" class="product-picker-list"></div>
             </section>
@@ -335,7 +335,7 @@
             <div class="inventory-toolbar">
               <div class="field with-icon grow">
                 <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.4-3.4"/></svg>
-                <input id="inventory-search" placeholder="Buscar SKU, nombre o código..." />
+                <input id="inventory-search" type="search" placeholder="Buscar SKU, nombre o código...">
               </div>
               <select id="inventory-filter"><option value="all">Todos visibles</option><option value="stock">Con stock</option><option value="assigned">Con ubicación</option><option value="unassigned">Sin ubicación</option></select>
             </div>
@@ -403,7 +403,7 @@
 
               <div class="settings-field">
                 <label for="settings-name">Nombre</label>
-                <input id="settings-name" maxlength="50" placeholder="Tu nombre" />
+                <input id="settings-name" type="text" maxlength="50" placeholder="Tu nombre">
               </div>
 
               <div class="settings-field">
@@ -427,8 +427,8 @@
                 <span id="settings-saved" class="saved-note hidden">Cambios guardados</span>
               </div>
             </section>
-            <aside class="panel settings-note">
-              <img src="/assets/kordis-logo-clean.png" alt="KORDIS Warehouse Management System" />
+            <aside class="panel settings-note" aria-label="Información del perfil">
+              <img src="/assets/kordis-logo-clean.png" alt="KORDIS Warehouse Management System">
               <h3>Perfil simple</h3>
               <p>KORDIS usa tu nombre local para identificar quién realizó cada cambio de ubicación.</p>
             </aside>
@@ -464,7 +464,7 @@
 
   <!-- Drawer móvil para funciones que no caben en la barra inferior -->
   <div id="mobile-drawer-backdrop" class="drawer-backdrop hidden"></div>
-  <aside id="mobile-drawer" class="mobile-drawer hidden">
+  <aside id="mobile-drawer" class="mobile-drawer hidden" aria-label="Menú móvil secundario">
     <div class="drawer-brand"><div class="drawer-lockup"><img src="/assets/kordis-mark.png" alt=""><div><strong>KORDIS</strong><span>Warehouse Management System</span></div></div><button id="drawer-close" class="square-btn" type="button">×</button></div>
     <button type="button" data-drawer-view="assignments"><span>Asignaciones</span><b>›</b></button>
     <button type="button" data-drawer-view="sync"><span>Sincronización</span><b>›</b></button>
