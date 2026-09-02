@@ -37,6 +37,7 @@ No es necesario cambiar la URL actual ni recrear el proyecto Railway.
 ## Variables Railway recomendadas
 
 ```text
+NODE_ENV=production
 CATALOG_MODE=relbase
 DATA_DIR=/data
 AUTO_SYNC_ENABLED=true
@@ -44,7 +45,19 @@ AUTO_SYNC_ON_START=true
 SYNC_INTERVAL_MINUTES=30
 RELBASE_SAFETY_MAX_PAGES=10000
 RELBASE_MAIN_WAREHOUSE_ID=2881
+MAX_BODY_BYTES=65536
+REQUIRE_APP_ACCESS=true
 ```
+
+Acceso y administración (guardar como secretos sellados en Railway):
+
+```text
+APP_ACCESS_USER
+APP_ACCESS_PASSWORD
+ADMIN_PIN
+```
+
+`APP_ACCESS_USER` y `APP_ACCESS_PASSWORD` activan la protección HTTP de toda la aplicación. El endpoint `/healthz` queda público únicamente para que Railway valide el despliegue. `ADMIN_PIN` no tiene valor predeterminado y se usa solo en operaciones administrativas.
 
 OAuth:
 
@@ -76,14 +89,18 @@ products:read inventory:read warehouses:read
 6. Si Relbase aparece no autorizado, entrar a `/auth/login`.
 7. Ejecutar una sincronización manual desde KORDIS.
 8. Comparar al menos 5 productos contra Relbase antes de dar la versión por cerrada.
+9. Sellar en Railway `APP_ACCESS_PASSWORD`, `ADMIN_PIN` y `RELBASE_CLIENT_SECRET` después de verificar el despliegue.
 
 ## Verificación técnica
 
 ```bash
 npm install
 npm run check
+npm test
 npm start
 ```
+
+La dependencia de Excel se instala desde la distribución oficial SheetJS 0.20.3 para evitar las vulnerabilidades conocidas de la versión 0.18.5 publicada en npm.
 
 El servidor usa Node.js 20 o superior.
 

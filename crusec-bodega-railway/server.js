@@ -40,9 +40,15 @@ function loadEnvFile() {
   }
 }
 
+function envInteger(name, fallback, min, max) {
+  const parsed = Number(process.env[name]);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(parsed)));
+}
+
 loadEnvFile();
 
-const PORT = Number(process.env.PORT || 3000);
+const PORT = envInteger('PORT', 3000, 1, 65535);
 const HOST = process.env.HOST || '0.0.0.0';
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -58,9 +64,16 @@ const SEED_FILE = path.join(PROJECT_DATA_DIR, 'locations.seed.json');
 const DEMO_PRODUCTS_FILE = path.join(PROJECT_DATA_DIR, 'demo-products.json');
 
 const CATALOG_MODE = String(process.env.CATALOG_MODE || 'demo').toLowerCase();
-const SYNC_INTERVAL_MINUTES = Math.max(1, Number(process.env.SYNC_INTERVAL_MINUTES || 10));
+const SYNC_INTERVAL_MINUTES = envInteger('SYNC_INTERVAL_MINUTES', 10, 1, 24 * 60);
 const AUTO_SYNC_ENABLED = String(process.env.AUTO_SYNC_ENABLED || 'true').toLowerCase() !== 'false';
 const AUTO_SYNC_ON_START = String(process.env.AUTO_SYNC_ON_START || 'true').toLowerCase() !== 'false';
+const IS_PRODUCTION = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+const APP_ACCESS_USER = String(process.env.APP_ACCESS_USER || '').trim();
+const APP_ACCESS_PASSWORD = String(process.env.APP_ACCESS_PASSWORD || '');
+const APP_ACCESS_ENABLED = Boolean(APP_ACCESS_USER && APP_ACCESS_PASSWORD);
+const APP_ACCESS_REQUIRED = String(process.env.REQUIRE_APP_ACCESS || (IS_PRODUCTION ? 'true' : 'false')).toLowerCase() !== 'false'
+  || Boolean(APP_ACCESS_USER || APP_ACCESS_PASSWORD);
+const MAX_BODY_BYTES = envInteger('MAX_BODY_BYTES', 64 * 1024, 1024, 1024 * 1024);
 let relbaseSyncRunning = false;
 let lastRelbaseAutoSyncError = null;
 
@@ -75,9 +88,18 @@ let relbaseSyncProgress = {
   finishedAt: null,
   error: null,
 };
-const MAX_SECOND_FLOOR_POSITION = Math.max(1, Number(process.env.MAX_SECOND_FLOOR_POSITION || 20));
-const ADMIN_PIN = String(process.env.ADMIN_PIN || '1234');
-const HISTORY_LIMIT = Math.max(100, Number(process.env.HISTORY_LIMIT || 2000));
+const MAX_AISLE = envInteger('MAX_AISLE', 6, 1, 100);
+const MAX_RACK = envInteger('MAX_RACK', 11, 1, 1000);
+const MAX_LEVEL = envInteger('MAX_LEVEL', 5, 1, 100);
+const MAX_SECOND_FLOOR_POSITION = envInteger('MAX_SECOND_FLOOR_POSITION', 20, 1, 10000);
+const ADMIN_PIN = String(process.env.ADMIN_PIN || '').trim();
+const HISTORY_LIMIT = envInteger('HISTORY_LIMIT', 2000, 100, 100000);
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const OAUTH_STATE_COOKIE = 'kordis_oauth_state';
+const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const ACCESS_FAILURE_WINDOW_MS = 15 * 60 * 1000;
+const ACCESS_FAILURE_LIMIT = 10;
+const failedAccessAttempts = new Map();
 
 const SPECIAL_AREAS = {
   PIEZA_1: {
@@ -637,21 +659,17 @@ function validateNormalLocation(input) {
   const rack = Number(input.rack);
   const level = Number(input.level);
 
-  const maxAisle = Number(process.env.MAX_AISLE || 6);
-  const maxRack = Number(process.env.MAX_RACK || 11);
-  const maxLevel = Number(process.env.MAX_LEVEL || 5);
-  
-  if (!Number.isInteger(aisle) || aisle < 1 || aisle > maxAisle) {
-    return `El pasillo debe estar entre 1 y ${maxAisle}.`;
+  if (!Number.isInteger(aisle) || aisle < 1 || aisle > MAX_AISLE) {
+    return `El pasillo debe estar entre 1 y ${MAX_AISLE}.`;
   }
   if (!['D', 'I'].includes(side)) {
     return 'El lado debe ser D (derecho) o I (izquierdo).';
   }
-  if (!Number.isInteger(rack) || rack < 1 || rack > maxRack) {
-    return `El rack debe estar entre 1 y ${maxRack}.`;
+  if (!Number.isInteger(rack) || rack < 1 || rack > MAX_RACK) {
+    return `El rack debe estar entre 1 y ${MAX_RACK}.`;
   }
-  if (!Number.isInteger(level) || level < 1 || level > maxLevel) {
-    return `El nivel debe estar entre 1 y ${maxLevel}.`;
+  if (!Number.isInteger(level) || level < 1 || level > MAX_LEVEL) {
+    return `El nivel debe estar entre 1 y ${MAX_LEVEL}.`;
   }
 
   const sideLabel = side === 'D' ? 'Derecho' : 'Izquierdo';
@@ -697,8 +715,140 @@ function validateSpecialLocation(input) {
   };
 }
 
-function sendRedirect(res, location) {
-  res.writeHead(302, { Location: location });
+const SECURITY_HEADERS = {
+  'Content-Security-Policy': "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; media-src 'self' blob:; manifest-src 'self'; form-action 'self'",
+  'Permissions-Policy': 'camera=(self), geolocation=(), microphone=()',
+  'Referrer-Policy': 'no-referrer',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+};
+
+function responseHeaders(extra = {}) {
+  return {
+    ...SECURITY_HEADERS,
+    ...(IS_PRODUCTION ? { 'Strict-Transport-Security': 'max-age=31536000' } : {}),
+    ...extra,
+  };
+}
+
+function constantTimeEqual(left, right) {
+  const a = Buffer.from(String(left));
+  const b = Buffer.from(String(right));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function requestUsesHttps(req) {
+  const forwarded = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  return forwarded === 'https' || Boolean(req.socket.encrypted);
+}
+
+function requestOriginAllowed(req) {
+  const site = String(req.headers['sec-fetch-site'] || '').toLowerCase();
+  if (site === 'cross-site') return false;
+
+  const origin = req.headers.origin;
+  if (!origin) return true;
+
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+  const protocol = requestUsesHttps(req) ? 'https:' : 'http:';
+
+  try {
+    const parsed = new URL(origin);
+    return parsed.protocol === protocol && parsed.host === host;
+  } catch {
+    return false;
+  }
+}
+
+function requestHasAppAccess(req) {
+  if (!APP_ACCESS_REQUIRED) return true;
+
+  const client = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').split(',')[0].trim();
+  const now = Date.now();
+  const previous = failedAccessAttempts.get(client);
+
+  if (previous?.blockedUntil > now) return false;
+
+  const reject = () => {
+    const withinWindow = previous && now - previous.startedAt < ACCESS_FAILURE_WINDOW_MS;
+    const attempts = withinWindow ? previous.attempts + 1 : 1;
+    failedAccessAttempts.set(client, {
+      attempts,
+      startedAt: withinWindow ? previous.startedAt : now,
+      blockedUntil: attempts >= ACCESS_FAILURE_LIMIT ? now + ACCESS_FAILURE_WINDOW_MS : 0,
+    });
+    return false;
+  };
+
+  if (!APP_ACCESS_ENABLED) return reject();
+
+  const authorization = String(req.headers.authorization || '');
+  if (!authorization.startsWith('Basic ')) return reject();
+
+  try {
+    const decoded = Buffer.from(authorization.slice(6), 'base64').toString('utf8');
+    const separator = decoded.indexOf(':');
+    if (separator < 0) return reject();
+
+    const valid = constantTimeEqual(decoded.slice(0, separator), APP_ACCESS_USER)
+      && constantTimeEqual(decoded.slice(separator + 1), APP_ACCESS_PASSWORD);
+
+    if (valid) failedAccessAttempts.delete(client);
+    return valid || reject();
+  } catch {
+    return reject();
+  }
+}
+
+function validAdminPin(pin) {
+  return Boolean(ADMIN_PIN) && constantTimeEqual(pin, ADMIN_PIN);
+}
+
+function oauthStateHash(state) {
+  return crypto.createHash('sha256').update(String(state)).digest('hex');
+}
+
+function readCookie(req, name) {
+  const prefix = `${name}=`;
+  for (const part of String(req.headers.cookie || '').split(';')) {
+    const value = part.trim();
+    if (value.startsWith(prefix)) {
+      try { return decodeURIComponent(value.slice(prefix.length)); } catch { return ''; }
+    }
+  }
+  return '';
+}
+
+function oauthStateCookie(req, state, maxAgeSeconds = 600) {
+  const secure = requestUsesHttps(req) ? '; Secure' : '';
+  return `${OAUTH_STATE_COOKIE}=${encodeURIComponent(state)}; Path=/auth/callback; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;
+}
+
+function writeSecureJson(file, value) {
+  ensureDataDir();
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(value, null, 2), { encoding: 'utf8', mode: 0o600 });
+  try { fs.chmodSync(tmp, 0o600); } catch {}
+  fs.renameSync(tmp, file);
+  try { fs.chmodSync(file, 0o600); } catch {}
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+  }[character]));
+}
+
+function sendRedirect(res, location, headers = {}) {
+  res.writeHead(302, responseHeaders({
+    Location: location,
+    'Cache-Control': 'no-store',
+    ...headers,
+  }));
   res.end();
 }
 
@@ -708,7 +858,7 @@ function htmlPage(title, message, extra = '') {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${title}</title>
+  <title>${escapeHtml(title)}</title>
   <style>
     body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f6f8; color: #111827; margin: 0; min-height: 100vh; display: grid; place-items: center; }
     main { width: min(680px, calc(100% - 32px)); background: white; border: 1px solid #dbe2ea; border-radius: 20px; padding: 32px; box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08); }
@@ -719,8 +869,8 @@ function htmlPage(title, message, extra = '') {
 </head>
 <body>
   <main>
-    <h1>${title}</h1>
-    <p>${message}</p>
+    <h1>${escapeHtml(title)}</h1>
+    <p>${escapeHtml(message)}</p>
     ${extra}
     <a href="/">Volver a KORDIS</a>
   </main>
@@ -728,66 +878,138 @@ function htmlPage(title, message, extra = '') {
 </html>`;
 }
 
-function writeOAuthState(state) {
-  ensureDataDir();
-  fs.writeFileSync(OAUTH_STATE_FILE, JSON.stringify({
-    state,
-    createdAt: new Date().toISOString(),
-    expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-  }, null, 2));
-}
-
-function readOAuthState() {
+function readOAuthStates() {
   try {
-    if (!fs.existsSync(OAUTH_STATE_FILE)) return null;
-    return JSON.parse(fs.readFileSync(OAUTH_STATE_FILE, 'utf8'));
+    if (!fs.existsSync(OAUTH_STATE_FILE)) return [];
+    const parsed = JSON.parse(fs.readFileSync(OAUTH_STATE_FILE, 'utf8'));
+
+    if (Array.isArray(parsed.states)) return parsed.states;
+    if (parsed.state && parsed.expiresAt) {
+      return [{ hash: oauthStateHash(parsed.state), expiresAt: parsed.expiresAt }];
+    }
+
+    return [];
   } catch {
-    return null;
+    return [];
   }
 }
 
-function clearOAuthState() {
-  try {
-    if (fs.existsSync(OAUTH_STATE_FILE)) fs.unlinkSync(OAUTH_STATE_FILE);
-  } catch {}
+function writeOAuthStates(states) {
+  if (!states.length) {
+    try { if (fs.existsSync(OAUTH_STATE_FILE)) fs.unlinkSync(OAUTH_STATE_FILE); } catch {}
+    return;
+  }
+
+  writeSecureJson(OAUTH_STATE_FILE, { states });
+}
+
+function writeOAuthState(state) {
+  const now = Date.now();
+  const states = readOAuthStates()
+    .filter((item) => new Date(item.expiresAt).getTime() > now)
+    .slice(-19);
+
+  states.push({
+    hash: oauthStateHash(state),
+    createdAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + OAUTH_STATE_TTL_MS).toISOString(),
+  });
+
+  writeOAuthStates(states);
+}
+
+function consumeOAuthState(state) {
+  const now = Date.now();
+  const expectedHash = oauthStateHash(state);
+  let valid = false;
+
+  const remaining = readOAuthStates().filter((item) => {
+    const current = new Date(item.expiresAt).getTime() > now;
+    const matches = current && constantTimeEqual(item.hash || '', expectedHash);
+    if (matches) valid = true;
+    return current && !matches;
+  });
+
+  writeOAuthStates(remaining);
+  return valid;
 }
 
 async function handleAuth(req, res, url) {
   const relbase = require('./src/relbase');
 
   if (req.method === 'GET' && url.pathname === '/auth/login') {
-    const state = crypto.randomBytes(24).toString('hex');
+    if (!requestOriginAllowed(req)) {
+      return sendText(res, 403, 'Origen de solicitud no permitido.');
+    }
+
+    const state = crypto.randomBytes(32).toString('hex');
     writeOAuthState(state);
-    return sendRedirect(res, relbase.getAuthUrl(state));
+    return sendRedirect(res, relbase.getAuthUrl(state), {
+      'Set-Cookie': oauthStateCookie(req, state),
+    });
   }
 
   if (req.method === 'GET' && url.pathname === '/auth/callback') {
     const error = url.searchParams.get('error');
     const errorDescription = url.searchParams.get('error_description');
+    const state = url.searchParams.get('state') || '';
+    const clearCookie = oauthStateCookie(req, '', 0);
 
     if (error) {
-      return sendText(res, 400, htmlPage('Relbase no autorizó la conexión', `${errorDescription || error}`), 'text/html; charset=utf-8');
+      if (state) consumeOAuthState(state);
+      return sendText(
+        res,
+        400,
+        htmlPage('Relbase no autorizó la conexión', errorDescription || error),
+        'text/html; charset=utf-8',
+        { 'Set-Cookie': clearCookie }
+      );
     }
 
     const code = url.searchParams.get('code');
-    const state = url.searchParams.get('state');
-    const savedState = readOAuthState();
+    const cookieState = readCookie(req, OAUTH_STATE_COOKIE);
 
     if (!code) {
-      return sendText(res, 400, htmlPage('Falta el código de autorización', 'Relbase no devolvió el código necesario para conectar.'), 'text/html; charset=utf-8');
+      return sendText(
+        res,
+        400,
+        htmlPage('Falta el código de autorización', 'Relbase no devolvió el código necesario para conectar.'),
+        'text/html; charset=utf-8',
+        { 'Set-Cookie': clearCookie }
+      );
     }
 
-    if (!savedState || savedState.state !== state || new Date(savedState.expiresAt).getTime() < Date.now()) {
-      return sendText(res, 400, htmlPage('Autorización inválida o expirada', 'Vuelve a iniciar sesión desde /auth/login.'), 'text/html; charset=utf-8');
+    if (!state || !cookieState || !constantTimeEqual(cookieState, state) || !consumeOAuthState(state)) {
+      return sendText(
+        res,
+        400,
+        htmlPage('Autorización inválida o expirada', 'Vuelve a iniciar sesión desde /auth/login.'),
+        'text/html; charset=utf-8',
+        { 'Set-Cookie': clearCookie }
+      );
     }
 
     try {
       const token = await relbase.exchangeCodeForToken(code);
-      clearOAuthState();
-      return sendText(res, 200, htmlPage('Relbase conectado correctamente', 'La autorización fue guardada. Ahora la app puede leer productos desde Relbase.', `<pre>Token válido hasta: ${token.expires_at || 'sin fecha informada'}</pre>`), 'text/html; charset=utf-8');
+      return sendText(
+        res,
+        200,
+        htmlPage('Relbase conectado correctamente', 'La autorización fue guardada. Ahora la app puede leer productos desde Relbase.', `<pre>Token válido hasta: ${escapeHtml(token.expires_at || 'sin fecha informada')}</pre>`),
+        'text/html; charset=utf-8',
+        { 'Set-Cookie': clearCookie }
+      );
     } catch (authError) {
-      console.error(authError);
-      return sendText(res, 500, htmlPage('No se pudo conectar Relbase', authError.message || 'Error desconocido.'), 'text/html; charset=utf-8');
+      console.error('No se pudo completar OAuth con Relbase:', authError.message);
+      const publicMessage = IS_PRODUCTION
+        ? 'Relbase rechazó la conexión. Revisa la configuración e inténtalo nuevamente.'
+        : authError.message || 'Error desconocido.';
+      return sendText(
+        res,
+        500,
+        htmlPage('No se pudo conectar Relbase', publicMessage),
+        'text/html; charset=utf-8',
+        { 'Set-Cookie': clearCookie }
+      );
     }
   }
 
@@ -796,31 +1018,45 @@ async function handleAuth(req, res, url) {
 
 function sendJson(res, code, payload) {
   const body = JSON.stringify(payload);
-  res.writeHead(code, {
+  res.writeHead(code, responseHeaders({
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': Buffer.byteLength(body),
     'Cache-Control': 'no-store',
-  });
+  }));
   res.end(body);
 }
 
-function sendText(res, code, text, type = 'text/plain; charset=utf-8') {
-  res.writeHead(code, {
+function sendText(res, code, text, type = 'text/plain; charset=utf-8', headers = {}) {
+  res.writeHead(code, responseHeaders({
     'Content-Type': type,
     'Content-Length': Buffer.byteLength(text),
-  });
+    'Cache-Control': 'no-store',
+    ...headers,
+  }));
   res.end(text);
 }
 
 async function readBody(req) {
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  let size = 0;
+
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > MAX_BODY_BYTES) {
+      const error = new Error('La solicitud supera el tamaño permitido.');
+      error.statusCode = 413;
+      throw error;
+    }
+    chunks.push(chunk);
+  }
   if (!chunks.length) return {};
 
   try {
     return JSON.parse(Buffer.concat(chunks).toString('utf8'));
   } catch {
-    throw new Error('La solicitud no contiene JSON válido.');
+    const error = new Error('La solicitud no contiene JSON válido.');
+    error.statusCode = 400;
+    throw error;
   }
 }
 
@@ -919,7 +1155,9 @@ function locationKind(location) {
 }
 
 function safeExcelValue(value) {
-  return value === undefined || value === null ? '' : value;
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string' && /^[=+\-@]/.test(value)) return `'${value}`;
+  return value;
 }
 
 function exportTypeLabel(type) {
@@ -1030,18 +1268,18 @@ async function sendAisleExport(res, aisle, type) {
   const buffer = workbookBufferFromRows(rows, `Pasillo ${aisle}`);
   const fileName = `Pasillo_${aisle}_${exportTypeLabel(type)}.xlsx`;
 
-  res.writeHead(200, {
+  res.writeHead(200, responseHeaders({
     'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'Content-Disposition': `attachment; filename="${fileName}"`,
     'Content-Length': buffer.length,
     'Cache-Control': 'no-store',
-  });
+  }));
 
   return res.end(buffer);
 }
 
 async function handleApi(req, res, url) {
-    if (req.method === 'GET' && url.pathname === '/api/exports/aisle') {
+  if (req.method === 'GET' && url.pathname === '/api/exports/aisle') {
     const aisle = Number(url.searchParams.get('aisle'));
     const type = String(url.searchParams.get('type') || 'full');
 
@@ -1052,15 +1290,25 @@ async function handleApi(req, res, url) {
     }
 
     if (type !== 'final') {
-  return sendJson(res, 400, {
-    error: 'Tipo de Excel no válido.',
-  });
-}
+      return sendJson(res, 400, {
+        error: 'Tipo de Excel no válido.',
+      });
+    }
 
     return sendAisleExport(res, aisle, type);
   }
-  
+
   if (req.method === 'POST' && url.pathname === '/api/cache/clear-products') {
+    const body = await readBody(req);
+
+    if (!ADMIN_PIN) {
+      return sendJson(res, 503, { error: 'La función administrativa no está configurada.' });
+    }
+
+    if (!validAdminPin(body.pin)) {
+      return sendJson(res, 401, { error: 'PIN incorrecto.' });
+    }
+
     clearProductCache();
 
     relbaseSyncProgress = {
@@ -1078,159 +1326,6 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, {
       message: 'Caché de productos eliminado. Sincroniza con Relbase para cargarlo nuevamente.',
     });
-  }
-
-
-  if (req.method === 'GET' && url.pathname.startsWith('/api/debug/find-relbase/')) {
-    const sku = normalizeSku(decodeURIComponent(url.pathname.replace('/api/debug/find-relbase/', '')));
-
-    if (!sku) {
-      return sendJson(res, 400, { error: 'Falta SKU.' });
-    }
-
-    if (CATALOG_MODE !== 'relbase') {
-      return sendJson(res, 409, { error: 'La app no está en modo Relbase.' });
-    }
-
-    const cache = readProductCache();
-    const cachedProduct = cache.products.find((product) =>
-      normalizeSku(product.sku) === sku ||
-      normalizeSku(product.barcode) === sku ||
-      normalizeSku(product.relbaseId) === sku
-    );
-
-    try {
-      const relbase = require('./src/relbase');
-
-      if (typeof relbase.debugFindProductInRelbase !== 'function') {
-        return sendJson(res, 500, {
-          error: 'La función debugFindProductInRelbase no está disponible en src/relbase.js.',
-        });
-      }
-
-      const result = await relbase.debugFindProductInRelbase(sku);
-
-      return sendJson(res, 200, {
-        sku,
-        productInCache: cachedProduct
-          ? {
-              sku: cachedProduct.sku,
-              relbaseId: cachedProduct.relbaseId || null,
-              barcode: cachedProduct.barcode || null,
-              name: cachedProduct.name || null,
-              stock: cachedProduct.stock ?? null,
-            }
-          : null,
-        result,
-      });
-    } catch (error) {
-      return sendJson(res, 500, {
-        error: error.message || 'No se pudo buscar el producto en Relbase.',
-      });
-    }
-  }
-
-  if (req.method === 'GET' && url.pathname.startsWith('/api/debug/relbase-product/')) {
-    const sku = normalizeSku(decodeURIComponent(url.pathname.replace('/api/debug/relbase-product/', '')));
-
-    if (!sku) {
-      return sendJson(res, 400, { error: 'Falta SKU.' });
-    }
-
-    if (CATALOG_MODE !== 'relbase') {
-      return sendJson(res, 409, { error: 'La app no está en modo Relbase.' });
-    }
-
-    try {
-      const relbase = require('./src/relbase');
-
-      if (
-        typeof relbase.buildProductLookupUrls !== 'function' ||
-        typeof relbase.fetchProductsPage !== 'function' ||
-        typeof relbase.getValidAccessToken !== 'function'
-      ) {
-        return sendJson(res, 500, {
-          error: 'Funciones de diagnóstico Relbase no disponibles en src/relbase.js.',
-        });
-      }
-
-      const accessToken = await relbase.getValidAccessToken();
-      const urls = relbase.buildProductLookupUrls(sku);
-      const responses = [];
-
-      for (const lookupUrl of urls) {
-        try {
-          const payload = await relbase.fetchProductsPage(lookupUrl, accessToken);
-          responses.push({
-            url: lookupUrl,
-            payload,
-          });
-        } catch (error) {
-          responses.push({
-            url: lookupUrl,
-            error: error.message || 'Error consultando Relbase.',
-            status: error.status || null,
-            payload: error.payload || null,
-          });
-        }
-      }
-
-      return sendJson(res, 200, {
-        sku,
-        checkedUrls: responses.length,
-        responses,
-      });
-    } catch (error) {
-      return sendJson(res, 500, {
-        error: error.message || 'No se pudo consultar Relbase.',
-      });
-    }
-  }
-
-  if (req.method === 'GET' && url.pathname.startsWith('/api/debug/stock/')) {
-    const sku = normalizeSku(decodeURIComponent(url.pathname.replace('/api/debug/stock/', '')));
-
-    if (!sku) {
-      return sendJson(res, 400, { error: 'Falta SKU.' });
-    }
-
-    if (CATALOG_MODE !== 'relbase') {
-      return sendJson(res, 409, { error: 'La app no está en modo Relbase.' });
-    }
-
-    const cache = readProductCache();
-    const cachedProduct = cache.products.find((product) =>
-      normalizeSku(product.sku) === sku ||
-      normalizeSku(product.barcode) === sku
-    );
-
-    try {
-      const relbase = require('./src/relbase');
-
-      if (typeof relbase.debugStockBySku !== 'function') {
-        return sendJson(res, 500, { error: 'La función debugStockBySku no está disponible.' });
-      }
-
-      const debug = await relbase.debugStockBySku({
-        sku,
-        relbaseId: cachedProduct?.relbaseId || null,
-        barcode: cachedProduct?.barcode || null,
-      });
-
-      return sendJson(res, 200, {
-        productInCache: cachedProduct
-          ? {
-              sku: cachedProduct.sku,
-              relbaseId: cachedProduct.relbaseId || null,
-              barcode: cachedProduct.barcode || null,
-              cacheStock: cachedProduct.stock ?? null,
-            }
-          : null,
-        debug,
-      });
-    } catch (error) {
-      return sendJson(res, 500, { error: error.message || 'No se pudo consultar stock Relbase.' });
-    }
   }
 
   if (req.method === 'GET' && url.pathname === '/api/sync/progress') {
@@ -1258,10 +1353,18 @@ async function handleApi(req, res, url) {
       relbaseStatus = { configured: true, authorized: false, error: error.message };
     }
 
+    const publicRelbaseStatus = relbaseStatus
+      ? {
+          configured: Boolean(relbaseStatus.configured),
+          authorized: Boolean(relbaseStatus.authorized),
+          tokenExpiresAt: relbaseStatus.tokenExpiresAt || null,
+        }
+      : null;
+
     return sendJson(res, 200, {
       relbaseEnabled: CATALOG_MODE === 'relbase',
       relbaseAuthorized: Boolean(relbaseStatus?.authorized),
-      relbaseStatus,
+      relbaseStatus: publicRelbaseStatus,
       mode: CATALOG_MODE,
       lastSyncAt: CATALOG_MODE === 'relbase' ? cache.lastSyncAt : null,
       syncStatus: getSyncStatusText(cache, relbaseStatus),
@@ -1270,10 +1373,10 @@ async function handleApi(req, res, url) {
       autoSyncEnabled: AUTO_SYNC_ENABLED,
       autoSyncOnStart: AUTO_SYNC_ON_START,
       relbaseSyncRunning,
-      lastRelbaseAutoSyncError,
+      lastRelbaseAutoSyncError: lastRelbaseAutoSyncError
+        ? { at: lastRelbaseAutoSyncError.at, reason: lastRelbaseAutoSyncError.reason }
+        : null,
       syncProgress: relbaseSyncProgress,
-      storage: DATA_DIR,
-      cacheFile: CATALOG_MODE === 'relbase' ? PRODUCT_CACHE_FILE : null,
       maxSecondFloorPosition: MAX_SECOND_FLOOR_POSITION,
       specialAreas: Object.values(SPECIAL_AREAS).map((area) => ({
         key: area.key,
@@ -1508,9 +1611,12 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'POST' && url.pathname === '/api/admin/history') {
     const body = await readBody(req);
-    const pin = String(body.pin || '');
 
-    if (!ADMIN_PIN || pin !== ADMIN_PIN) {
+    if (!ADMIN_PIN) {
+      return sendJson(res, 503, { error: 'La función administrativa no está configurada.' });
+    }
+
+    if (!validAdminPin(body.pin)) {
       return sendJson(res, 401, { error: 'PIN incorrecto.' });
     }
 
@@ -1581,7 +1687,8 @@ async function handleApi(req, res, url) {
 function serveStatic(res, pathname) {
   const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
   const file = path.normalize(path.join(PUBLIC_DIR, rel));
-  if (!file.startsWith(PUBLIC_DIR)) return sendText(res, 403, 'Acceso denegado');
+  const relative = path.relative(PUBLIC_DIR, file);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return sendText(res, 403, 'Acceso denegado');
   if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) return sendText(res, 404, 'Archivo no encontrado');
 
   const ext = path.extname(file).toLowerCase();
@@ -1597,11 +1704,11 @@ function serveStatic(res, pathname) {
   };
 
   const content = fs.readFileSync(file);
-  res.writeHead(200, {
+  res.writeHead(200, responseHeaders({
     'Content-Type': types[ext] || 'application/octet-stream',
     'Content-Length': content.length,
     'Cache-Control': ext === '.html' ? 'no-store' : 'public, max-age=300',
-  });
+  }));
   res.end(content);
 }
 
@@ -1612,19 +1719,46 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
+    if (req.method === 'GET' && url.pathname === '/healthz') {
+      return sendText(res, 200, 'ok');
+    }
+
+    if (!requestHasAppAccess(req)) {
+      return sendText(
+        res,
+        401,
+        'Autenticación requerida.',
+        'text/plain; charset=utf-8',
+        { 'WWW-Authenticate': 'Basic realm="KORDIS", charset="UTF-8"' }
+      );
+    }
+
+    if (UNSAFE_METHODS.has(req.method) && !requestOriginAllowed(req)) {
+      return sendJson(res, 403, { error: 'Origen de solicitud no permitido.' });
+    }
+
     if (url.pathname.startsWith('/auth/')) return await handleAuth(req, res, url);
     if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
     return serveStatic(res, url.pathname);
   } catch (error) {
     console.error(error);
-    return sendJson(res, 500, { error: error.message || 'Error interno del servidor.' });
+    const statusCode = Number(error.statusCode || 500);
+    const message = statusCode < 500 || !IS_PRODUCTION
+      ? error.message
+      : 'Error interno del servidor.';
+    return sendJson(res, statusCode, { error: message || 'Error interno del servidor.' });
   }
 });
 
 server.listen(PORT, HOST, () => {
   console.log(`KORDIS disponible en http://localhost:${PORT}`);
-  console.log(`Catálogo: ${CATALOG_MODE}. Ubicaciones: ${LOCATIONS_FILE}`);
-  console.log(`Caché productos: ${PRODUCT_CACHE_FILE}`);
+  console.log(`Catálogo: ${CATALOG_MODE}.`);
 
+  if (APP_ACCESS_REQUIRED && !APP_ACCESS_ENABLED) {
+    console.warn('Aviso de seguridad: APP_ACCESS_USER y APP_ACCESS_PASSWORD no están configurados.');
+  }
+  if (!ADMIN_PIN) {
+    console.warn('Aviso de seguridad: ADMIN_PIN no está configurado; las funciones administrativas están desactivadas.');
+  }
   startRelbaseAutoSync();
 });
