@@ -89,7 +89,7 @@ products:read inventory:read warehouses:read
 6. Si Relbase aparece no autorizado, entrar a `/auth/login`.
 7. Ejecutar una sincronización manual desde KORDIS.
 8. Comparar al menos 5 productos contra Relbase antes de dar la versión por cerrada.
-9. Sellar en Railway `APP_ACCESS_PASSWORD`, `ADMIN_PIN` y `RELBASE_CLIENT_SECRET` después de verificar el despliegue.
+9. Crear en Railway únicamente `APP_ACCESS_PASSWORD` y `ADMIN_PIN` como secretos nuevos después de verificar el despliegue. Las variables `RELBASE_*` existentes se conservan sin cambiar.
 
 ## Verificación técnica
 
