@@ -1,6 +1,12 @@
 const fs = require('fs');
 const path = require('path');
 
+function envInteger(name, fallback, min, max) {
+  const parsed = Number(process.env[name]);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(parsed)));
+}
+
 const PROJECT_DATA_DIR = path.join(__dirname, '..', 'data');
 const DATA_DIR = path.resolve(process.env.DATA_DIR || PROJECT_DATA_DIR);
 const TOKEN_FILE = path.join(DATA_DIR, 'relbase-token.json');
@@ -9,14 +15,41 @@ const RELBASE_BASE_URL = String(process.env.RELBASE_BASE_URL || 'https://api.rel
 const RELBASE_AUTH_URL = process.env.RELBASE_AUTH_URL || `${RELBASE_BASE_URL}/oauth/authorize`;
 const RELBASE_TOKEN_URL = process.env.RELBASE_TOKEN_URL || `${RELBASE_BASE_URL}/oauth/token`;
 const RELBASE_PRODUCTS_URL = process.env.RELBASE_PRODUCTS_URL || `${RELBASE_BASE_URL}/api/v2/productos`;
-const RELBASE_SAFETY_MAX_PAGES = Math.max(
-  1000,
-  Number(process.env.RELBASE_SAFETY_MAX_PAGES || 10000)
-);
+const RELBASE_SAFETY_MAX_PAGES = envInteger('RELBASE_SAFETY_MAX_PAGES', 10000, 1000, 100000);
 
 const RELBASE_MAIN_WAREHOUSE_ID = String(process.env.RELBASE_MAIN_WAREHOUSE_ID || '2881').trim();
+let refreshPromise = null;
+
 function ensureDataDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+function secureUrl(value, label) {
+  let url;
+
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${label} no contiene una URL válida.`);
+  }
+
+  const localHost = ['localhost', '127.0.0.1', '::1'].includes(url.hostname);
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && localHost)) {
+    throw new Error(`${label} debe usar HTTPS.`);
+  }
+
+  return url;
+}
+
+function productApiUrl(value) {
+  const base = secureUrl(RELBASE_PRODUCTS_URL, 'RELBASE_PRODUCTS_URL');
+  const url = secureUrl(new URL(value, base).toString(), 'URL de productos Relbase');
+
+  if (url.origin !== base.origin) {
+    throw new Error('Relbase intentó continuar la consulta en un origen no permitido.');
+  }
+
+  return url;
 }
 
 function getConfig() {
@@ -39,9 +72,10 @@ function isConfigured() {
 function readToken() {
   try {
     if (!fs.existsSync(TOKEN_FILE)) return null;
-    return JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));
-  } catch (error) {
-    console.error('Error leyendo token Relbase:', error);
+    const token = JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));
+    return token && typeof token === 'object' ? token : null;
+  } catch {
+    console.error('No se pudo leer el token guardado de Relbase.');
     return null;
   }
 }
@@ -49,7 +83,14 @@ function readToken() {
 function saveToken(token, previous = null) {
   ensureDataDir();
 
-  const expiresIn = Number(token.expires_in || 900);
+  if (!token?.access_token || typeof token.access_token !== 'string') {
+    throw new Error('Relbase no devolvió un access_token válido.');
+  }
+
+  const parsedExpiresIn = Number(token.expires_in);
+  const expiresIn = Number.isFinite(parsedExpiresIn) && parsedExpiresIn > 0
+    ? Math.trunc(parsedExpiresIn)
+    : 900;
   const expiresAt = token.expires_at || new Date(Date.now() + expiresIn * 1000).toISOString();
 
   const stored = {
@@ -63,8 +104,10 @@ function saveToken(token, previous = null) {
   };
 
   const tmp = `${TOKEN_FILE}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(stored, null, 2));
+  fs.writeFileSync(tmp, JSON.stringify(stored, null, 2), { encoding: 'utf8', mode: 0o600 });
+  try { fs.chmodSync(tmp, 0o600); } catch {}
   fs.renameSync(tmp, TOKEN_FILE);
+  try { fs.chmodSync(TOKEN_FILE, 0o600); } catch {}
 
   return stored;
 }
@@ -91,7 +134,8 @@ async function requestToken(params) {
     client_secret: config.clientSecret,
   });
 
-  const response = await fetch(config.tokenUrl, {
+  const tokenUrl = secureUrl(config.tokenUrl, 'RELBASE_TOKEN_URL');
+  const response = await fetch(tokenUrl, {
     method: 'POST',
     headers: {
       Accept: 'application/json',
@@ -110,16 +154,12 @@ async function requestToken(params) {
   }
 
   if (!response.ok) {
-    console.error('Error token Relbase:', response.status, payload);
-
     const error = new Error(payload.error_description || payload.error || `Relbase rechazó la solicitud de token (${response.status}).`);
     error.status = response.status;
-    error.payload = payload;
     throw error;
   }
 
   if (!payload.access_token) {
-    console.error('Respuesta token Relbase sin access_token:', payload);
     throw new Error('Relbase no devolvió access_token.');
   }
 
@@ -128,6 +168,7 @@ async function requestToken(params) {
 
 async function exchangeCodeForToken(code) {
   const config = getConfig();
+  secureUrl(config.redirectUri, 'RELBASE_REDIRECT_URI');
 
   const token = await requestToken({
     grant_type: 'authorization_code',
@@ -139,18 +180,28 @@ async function exchangeCodeForToken(code) {
 }
 
 async function refreshAccessToken() {
-  const previous = readToken();
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const previous = readToken();
 
-  if (!previous?.refresh_token) {
-    throw new Error('Relbase todavía no está autorizado. Entra a /auth/login para autorizar la aplicación.');
+      if (!previous?.refresh_token) {
+        throw new Error('Relbase todavía no está autorizado. Entra a /auth/login para autorizar la aplicación.');
+      }
+
+      const token = await requestToken({
+        grant_type: 'refresh_token',
+        refresh_token: previous.refresh_token,
+      });
+
+      return saveToken(token, previous);
+    })();
   }
 
-  const token = await requestToken({
-    grant_type: 'refresh_token',
-    refresh_token: previous.refresh_token,
-  });
-
-  return saveToken(token, previous);
+  try {
+    return await refreshPromise;
+  } finally {
+    refreshPromise = null;
+  }
 }
 
 async function getValidAccessToken() {
@@ -171,7 +222,8 @@ function getAuthUrl(state) {
     throw new Error('Relbase no está configurado. Faltan variables en Railway.');
   }
 
-  const url = new URL(config.authUrl);
+  const url = secureUrl(config.authUrl, 'RELBASE_AUTH_URL');
+  secureUrl(config.redirectUri, 'RELBASE_REDIRECT_URI');
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('client_id', config.clientId);
   url.searchParams.set('redirect_uri', config.redirectUri);
@@ -533,33 +585,9 @@ function extractProducts(payload) {
   return [];
 }
 
-function logDebugRelbase(payload, url) {
-  if (global.__RELBASE_DEBUG_LOGGED__) return;
-
-  global.__RELBASE_DEBUG_LOGGED__ = true;
-
-  const sampleProducts = extractProducts(payload);
-  const first = sampleProducts[0];
-
-  console.log('========== DEBUG RELBASE ==========');
-  console.log('URL consultada:', url);
-  console.log('Campos principales de respuesta:', Object.keys(payload || {}));
-  console.log('Meta:', JSON.stringify(payload?.meta || payload?.pagination || {}, null, 2));
-  console.log('Cantidad en esta página:', sampleProducts.length);
-
-  if (first) {
-    console.log('Campos del primer producto:', Object.keys(first));
-    console.log('Primer producto muestra:', JSON.stringify(first, null, 2).slice(0, 6000));
-  } else {
-    console.log('No se encontró producto de muestra en esta página.');
-    console.log('Respuesta muestra:', JSON.stringify(payload, null, 2).slice(0, 6000));
-  }
-
-  console.log('======== FIN DEBUG RELBASE ========');
-}
-
 async function fetchProductsPage(url, accessToken) {
-  const response = await fetch(url, {
+  const safeUrl = productApiUrl(url);
+  const response = await fetch(safeUrl, {
     headers: {
       Accept: 'application/json',
       Authorization: `Bearer ${accessToken}`,
@@ -576,15 +604,10 @@ async function fetchProductsPage(url, accessToken) {
   }
 
   if (!response.ok) {
-    console.error('Error productos Relbase:', response.status, payload);
-
     const error = new Error(payload.error_description || payload.error || `Relbase rechazó la consulta de productos (${response.status}).`);
     error.status = response.status;
-    error.payload = payload;
     throw error;
   }
-
-  logDebugRelbase(payload, url);
 
   return payload;
 }
@@ -597,11 +620,7 @@ function nextPageUrl(payload, currentUrl) {
     payload?.next;
 
   if (directNext) {
-    try {
-      return new URL(directNext, RELBASE_PRODUCTS_URL).toString();
-    } catch {
-      return null;
-    }
+    return productApiUrl(directNext).toString();
   }
 
   const meta = payload?.meta || payload?.pagination || {};
@@ -631,10 +650,10 @@ function nextPageUrl(payload, currentUrl) {
   if (nextPage === null || nextPage < 1) return null;
   if (totalPages !== null && nextPage > totalPages) return null;
 
-  const url = new URL(currentUrl || RELBASE_PRODUCTS_URL);
+  const url = productApiUrl(currentUrl || RELBASE_PRODUCTS_URL);
   url.searchParams.set('page', String(nextPage));
 
-  return url.toString();
+  return productApiUrl(url).toString();
 }
 
 async function listProducts(options = {}) {
@@ -759,7 +778,7 @@ function productMatchesSku(product, sku) {
 
 function buildProductLookupUrls(sku) {
   const urls = [];
-  const base = new URL(RELBASE_PRODUCTS_URL);
+  const base = productApiUrl(RELBASE_PRODUCTS_URL);
 
   const addUrl = (url) => {
     const value = url.toString();
@@ -781,7 +800,8 @@ function buildProductLookupUrls(sku) {
 }
 
 async function fetchProductLookupPayload(url, accessToken) {
-  const response = await fetch(url, {
+  const safeUrl = productApiUrl(url);
+  const response = await fetch(safeUrl, {
     headers: {
       Accept: 'application/json',
       Authorization: `Bearer ${accessToken}`,
@@ -806,7 +826,6 @@ async function fetchProductLookupPayload(url, accessToken) {
       `Relbase rechazó la búsqueda puntual de producto (${response.status}).`
     );
     error.status = response.status;
-    error.payload = payload;
     throw error;
   }
 
@@ -892,150 +911,10 @@ async function findProductBySku(skuInput) {
   return null;
 }
 
-async function debugFindProductInRelbase(skuInput, options = {}) {
-  const sku = cleanSku(skuInput);
-  if (!sku) {
-    throw new Error('Falta SKU para buscar en Relbase.');
-  }
-
-  let accessToken = await getValidAccessToken();
-
-  let url = RELBASE_PRODUCTS_URL;
-  const seenUrls = new Set();
-  let pageCount = 0;
-  let knownTotalPages = null;
-  let scannedProducts = 0;
-
-  while (url) {
-    pageCount += 1;
-
-    if (pageCount > RELBASE_SAFETY_MAX_PAGES) {
-      throw new Error(
-        `Relbase superó el límite de seguridad de ${RELBASE_SAFETY_MAX_PAGES} páginas buscando ${sku}.`
-      );
-    }
-
-    if (seenUrls.has(url)) {
-      throw new Error(
-        `Relbase repitió una página buscando ${sku}. Se detuvo para evitar un ciclo infinito.`
-      );
-    }
-
-    seenUrls.add(url);
-
-    let payload;
-
-    try {
-      payload = await fetchProductsPage(url, accessToken);
-    } catch (error) {
-      if (error.status === 401) {
-        console.warn('Relbase respondió 401 en debug find. Renovando token...');
-        const refreshed = await refreshAccessToken();
-        accessToken = refreshed.access_token;
-        payload = await fetchProductsPage(url, accessToken);
-      } else {
-        error.message = `Error buscando ${sku} en página ${pageCount}: ${error.message}`;
-        throw error;
-      }
-    }
-
-    const products = extractProducts(payload);
-    scannedProducts += products.length;
-
-    const meta = payload?.meta || payload?.pagination || {};
-    const totalPages = numberOrNull(firstValue(
-      meta.total_pages,
-      meta.totalPages,
-      meta.pages,
-      meta.last_page,
-      meta.lastPage
-    ));
-
-    if (totalPages !== null) {
-      knownTotalPages = totalPages;
-    }
-
-    for (let index = 0; index < products.length; index += 1) {
-      const product = products[index];
-      const normalized = normalizeProduct(product);
-
-      const rawCodes = {
-        sku: firstValue(product.sku, product.SKU),
-        code: firstValue(product.code, product.codigo, product.codigo_sku, product.codigoSku),
-        barcode: firstValue(product.barcode, product.codigo_barras, product.codigoBarras),
-        id: product.id || null,
-        product_id_parent: product.product_id_parent || null,
-      };
-
-      const candidates = [
-        normalized.sku,
-        normalized.barcode,
-        normalized.relbaseId,
-        rawCodes.sku,
-        rawCodes.code,
-        rawCodes.barcode,
-        rawCodes.id,
-      ].map(cleanSku).filter(Boolean);
-
-      if (candidates.includes(sku)) {
-        return {
-          found: true,
-          sku,
-          page: pageCount,
-          index,
-          totalPages: knownTotalPages,
-          scannedProducts,
-          currentUrl: url,
-          rawCodes,
-          normalized,
-          inventories: product.inventories || product.inventory || product.stock_bodegas || product.stockBodegas || [],
-          rawProduct: product,
-        };
-      }
-    }
-
-    url = nextPageUrl(payload, url);
-  }
-
-  return {
-    found: false,
-    sku,
-    page: pageCount,
-    totalPages: knownTotalPages,
-    scannedProducts,
-  };
-}
-
-async function debugStockBySku(input = {}) {
-  const sku = cleanSku(input.sku);
-  if (!sku) {
-    throw new Error('Falta SKU para revisar stock.');
-  }
-
-  const found = await debugFindProductInRelbase(sku);
-
-  return {
-    sku,
-    warehouseId: RELBASE_MAIN_WAREHOUSE_ID || null,
-    found: found.found,
-    page: found.page || null,
-    scannedProducts: found.scannedProducts || 0,
-    rawCodes: found.rawCodes || null,
-    normalized: found.normalized || null,
-    inventories: found.inventories || [],
-  };
-}
-
-
 module.exports = {
   getAuthUrl,
   exchangeCodeForToken,
   listProducts,
   findProductBySku,
   status,
-  buildProductLookupUrls,
-  fetchProductsPage,
-  getValidAccessToken,
-  debugFindProductInRelbase,
-  debugStockBySku,
 };

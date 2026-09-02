@@ -771,7 +771,7 @@ function renderExcelPreview(){
   $('#excel-preview-list').innerHTML=products.length?products.map(p=>`
     <div class="compact-item">
       <div><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.sku)}</small></div>
-      <span class="location-tag">${shortLocation(p.location)}</span>
+      <span class="location-tag">${escapeHtml(shortLocation(p.location))}</span>
     </div>`).join(''):`<div class="compact-item"><div><strong>Sin productos</strong><small>Todavía no hay ubicaciones asignadas en este pasillo.</small></div></div>`;
 }
 function locationSort(a,b){
@@ -873,7 +873,7 @@ async function openScanner(){
       <div class="scanner-video" id="scanner-video-wrap"><span>Preparando cámara…</span></div>
       <div class="scanner-side">
         <p>Si tu navegador no permite lectura automática, puedes introducir el código de barras o SKU.</p>
-        <input id="scanner-manual" placeholder="Código o SKU">
+        <input id="scanner-manual" type="search" placeholder="Código o SKU">
         <button id="scanner-manual-btn" class="btn btn-primary" type="button">Buscar código</button>
       </div>
     </div>`);
@@ -913,7 +913,7 @@ function stopScanner(){
 
 async function syncNow(){
   if(state.syncing)return;
-  const btn=$('#sync-now-btn'), box=$('#sync-progress'), fill=$('#sync-progress-fill'), pct=$('#sync-progress-percent'), label=$('#sync-progress-label');
+  const box=$('#sync-progress'), fill=$('#sync-progress-fill'), pct=$('#sync-progress-percent'), label=$('#sync-progress-label');
   state.syncing=true; renderStatus();
   box.classList.remove('hidden');
   fill.style.width='2%'; pct.textContent='2%'; label.textContent='Iniciando sincronización…';
@@ -977,7 +977,7 @@ function showOnboarding(){
     <h2>¿Quién está usando el sistema?</h2>
     <p>Ingresa tu nombre para continuar.</p>
     <form id="onboarding-form">
-      <input id="onboarding-name" maxlength="50" autocomplete="name" placeholder="Ejemplo: Juan Pérez">
+      <input id="onboarding-name" type="text" maxlength="50" autocomplete="name" placeholder="Ejemplo: Juan Pérez">
       <button class="btn btn-primary" type="submit">Continuar</button>
     </form>
   </div>`);
@@ -1042,8 +1042,6 @@ function setupEvents(){
   $('#scan-btn').addEventListener('click',openScanner);
   $('#open-map-btn').addEventListener('click',openMapModal);
   $('#location-chevron-btn')?.addEventListener('click',openMapModal);
-  $('#mobile-open-map')?.addEventListener('click',openMapModal);
-  $('#mobile-excel-action')?.addEventListener('click',()=>setView('excel'));
   $('#mobile-open-map')?.addEventListener('click',openMapModal);
   $('#mobile-excel-action')?.addEventListener('click',()=>setView('excel'));
   $('#history-btn').addEventListener('click',openHistoryModal);

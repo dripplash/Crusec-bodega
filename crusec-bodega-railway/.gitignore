@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+npm-debug.log*
+
+# Credenciales y datos generados en ejecución local.
+data/relbase-token.json
+data/relbase-token.json.tmp
+data/relbase-oauth-state.json
+data/relbase-oauth-state.json.tmp
+data/products-cache.json
+data/products-cache.json.tmp

@@ -5,12 +5,13 @@
   "description": "KORDIS Warehouse Management System · Railway + Relbase OAuth",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check public/app.js && node --check src/relbase.js"
+    "check": "node --check server.js && node --check public/app.js && node --check src/relbase.js",
+    "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }
 }
