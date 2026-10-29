@@ -22,6 +22,17 @@
   --topbar:78px;
   font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 }
+
+/* Fotos del catálogo de crusec.cl */
+.product-image-frame{overflow:hidden;background:#fff}
+.product-image-frame img{width:100%;height:100%;object-fit:contain;display:block}
+.search-preview-image{width:58px;height:58px;object-fit:contain;border:1px solid #e3e9ef;border-radius:11px;background:#fff;flex:0 0 auto}
+.inventory-product-cell{display:flex;align-items:center;gap:11px;min-width:0}
+.inventory-product-cell>img,.inventory-image-empty{width:46px;height:46px;border:1px solid #e2e8ef;border-radius:9px;background:#fff;object-fit:contain;flex:0 0 auto}
+.inventory-image-empty{display:grid;place-items:center;font-size:.48rem;color:#91a0b1;text-align:center}
+.inventory-product-cell>div{display:grid;gap:2px;min-width:0}
+@media(max-width:860px){.inventory-product-cell>img,.inventory-image-empty{width:42px;height:42px}}
+@media(max-width:480px){.search-preview-image{display:none}}
 *{box-sizing:border-box}
 html{min-height:100%;background:var(--soft);color:var(--ink);scroll-behavior:smooth}
 body{margin:0;min-height:100vh;background:var(--soft);overflow-x:hidden}

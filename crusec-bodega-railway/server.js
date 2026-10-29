@@ -62,6 +62,7 @@ const OAUTH_STATE_FILE = path.join(DATA_DIR, 'relbase-oauth-state.json');
 
 const SEED_FILE = path.join(PROJECT_DATA_DIR, 'locations.seed.json');
 const DEMO_PRODUCTS_FILE = path.join(PROJECT_DATA_DIR, 'demo-products.json');
+const PRODUCT_IMAGES_FILE = path.join(PROJECT_DATA_DIR, 'product-images.json');
 
 const CATALOG_MODE = String(process.env.CATALOG_MODE || 'demo').toLowerCase();
 const SYNC_INTERVAL_MINUTES = envInteger('SYNC_INTERVAL_MINUTES', 10, 1, 24 * 60);
@@ -76,6 +77,7 @@ const APP_ACCESS_REQUIRED = String(process.env.REQUIRE_APP_ACCESS || (IS_PRODUCT
 const MAX_BODY_BYTES = envInteger('MAX_BODY_BYTES', 64 * 1024, 1024, 1024 * 1024);
 let relbaseSyncRunning = false;
 let lastRelbaseAutoSyncError = null;
+let productImagesCache = null;
 
 let relbaseSyncProgress = {
   running: false,
@@ -142,6 +144,22 @@ const SPECIAL_AREAS = {
 
 function normalizeSku(v) {
   return String(v || '').trim().toUpperCase();
+}
+
+function readProductImages() {
+  if (productImagesCache) return productImagesCache;
+  try {
+    const payload = JSON.parse(fs.readFileSync(PRODUCT_IMAGES_FILE, 'utf8'));
+    productImagesCache = payload?.images && typeof payload.images === 'object' ? payload.images : {};
+  } catch (error) {
+    console.warn('No se pudo leer el catálogo de imágenes:', error.message);
+    productImagesCache = {};
+  }
+  return productImagesCache;
+}
+
+function productImage(sku) {
+  return readProductImages()[normalizeSku(sku)] || null;
 }
 
 function brandFromCode(code) {
@@ -636,6 +654,7 @@ function mergeLocation(product, locationsDb) {
 }
 
 function publicProduct(product) {
+  const image = productImage(product.sku);
   return {
     relbaseId: product.relbaseId || product.sku,
     sku: normalizeSku(product.sku),
@@ -650,6 +669,8 @@ function publicProduct(product) {
     location: product.location || null,
     locationUpdatedAt: product.locationUpdatedAt || null,
     locationUpdatedBy: product.locationUpdatedBy || null,
+    imageUrl: image?.imageUrl || null,
+    productUrl: image?.productUrl || null,
   };
 }
 
@@ -716,7 +737,7 @@ function validateSpecialLocation(input) {
 }
 
 const SECURITY_HEADERS = {
-  'Content-Security-Policy': "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; media-src 'self' blob:; manifest-src 'self'; form-action 'self'",
+  'Content-Security-Policy': "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https://cdnx.jumpseller.com https://images.jumpseller.com; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; media-src 'self' blob:; manifest-src 'self'; form-action 'self'",
   'Permissions-Policy': 'camera=(self), geolocation=(), microphone=()',
   'Referrer-Policy': 'no-referrer',
   'X-Content-Type-Options': 'nosniff',

@@ -108,6 +108,7 @@ function searchPreviewMarkup(product, query=''){
   );
   return `
     <div class="search-preview-card ${exact?'exact':''}">
+      ${product.imageUrl?`<img class="search-preview-image" src="${escapeHtml(product.imageUrl)}" alt="" loading="lazy">`:''}
       <div class="search-preview-copy">
         <span class="search-preview-kicker">${exact?'Coincidencia exacta':'Vista previa'}</span>
         <strong>${escapeHtml(product.name||'Producto sin nombre')}</strong>
@@ -313,6 +314,14 @@ function renderCurrentProduct(){
   $('#product-name').textContent=p.name||'Producto sin nombre';
   $('#product-brand').textContent=`Marca: ${displayBrand(p)}`;
   $('#product-stock').textContent=p.stock??'—';
+  const image=$('#product-image');
+  const fallback=$('#product-image-placeholder');
+  if(image){
+    image.classList.toggle('hidden',!p.imageUrl);
+    if(p.imageUrl){ image.src=p.imageUrl; image.alt=p.name||'Producto'; }
+    else image.removeAttribute('src');
+  }
+  fallback?.classList.toggle('hidden',Boolean(p.imageUrl));
 
   const statusText=$('.product-sync-label');
   if(statusText) statusText.textContent=state.status?.relbaseAuthorized?'Producto sincronizado':'Producto del catálogo';
@@ -687,7 +696,7 @@ function inventoryStockLabel(product){
 function inventoryRows(products){
   return products.map(p=>`
     <tr>
-      <td><strong>${escapeHtml(p.name)}</strong><small>Marca: ${escapeHtml(displayBrand(p))}</small></td>
+      <td><div class="inventory-product-cell">${p.imageUrl?`<img src="${escapeHtml(p.imageUrl)}" alt="" loading="lazy">`:'<span class="inventory-image-empty">Sin foto</span>'}<div><strong>${escapeHtml(p.name)}</strong><small>Marca: ${escapeHtml(displayBrand(p))}</small></div></div></td>
       <td>${escapeHtml(p.sku)}</td>
       <td><span class="stock-table ${inventoryStockIsUnknown(p)?'stock-unknown':''}">${inventoryStockLabel(p)}</span></td>
       <td><span class="${p.location?'assigned':'unassigned'}">${escapeHtml(locationLabel(p.location))}</span></td>

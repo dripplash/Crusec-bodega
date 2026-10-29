@@ -5,6 +5,7 @@
   "description": "KORDIS Warehouse Management System · Railway + Relbase OAuth",
   "scripts": {
     "start": "node server.js",
+    "sync:images": "node scripts/sync-product-images.js",
     "check": "node --check server.js && node --check public/app.js && node --check src/relbase.js",
     "test": "node --test test/*.test.js"
   },
