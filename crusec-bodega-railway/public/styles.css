@@ -24,8 +24,8 @@
 }
 
 /* Fotos del catálogo de crusec.cl */
-.product-image-frame{overflow:hidden;background:#fff}
-.product-image-frame img{width:100%;height:100%;object-fit:contain;display:block}
+.product-image-frame{overflow:hidden;background:#fff;isolation:isolate}
+.product-image-frame img{width:100%;height:100%;object-fit:contain;object-position:center;display:block;transform:scale(1.18);transform-origin:center}
 .search-preview-image{width:58px;height:58px;object-fit:contain;border:1px solid #e3e9ef;border-radius:11px;background:#fff;flex:0 0 auto}
 .inventory-product-cell{display:flex;align-items:center;gap:11px;min-width:0}
 .inventory-product-cell>img,.inventory-image-empty{width:46px;height:46px;border:1px solid #e2e8ef;border-radius:9px;background:#fff;object-fit:contain;flex:0 0 auto}
