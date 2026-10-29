@@ -780,9 +780,29 @@ function locationSort(a,b){
 }
 function downloadExcel(){
   const aisle=Number($('#excel-aisle').value);
-  const url=`/api/exports/aisle?aisle=${encodeURIComponent(aisle)}&type=final`;
-  window.location.href=url;
-  showToast(`Preparando Excel del Pasillo ${aisle}`);
+  const products=state.products
+    .filter(product=>product.location?.type==='normal'&&Number(product.location.aisle)===aisle)
+    .sort(locationSort);
+  if(!products.length){showToast(`No hay productos ubicados en el Pasillo ${aisle}`);return}
+  if(!window.XLSX){showToast('El generador de Excel todavía no está disponible');return}
+  const rows=products.map(product=>({
+    SKU:product.sku,
+    Nombre:product.name,
+    Pasillo:product.location.aisle,
+    Lado:product.location.sideLabel,
+    Rack:product.location.rack,
+    Nivel:product.location.level,
+    'Stock Relbase':product.stock??'',
+    Pedir:'',
+    'No Pedir':'',
+    'Bajar Precio':'',
+  }));
+  const sheet=XLSX.utils.json_to_sheet(rows);
+  sheet['!cols']=[{wch:18},{wch:55},{wch:10},{wch:14},{wch:10},{wch:10},{wch:16},{wch:12},{wch:12},{wch:15}];
+  const workbook=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook,sheet,`Pasillo ${aisle}`);
+  XLSX.writeFile(workbook,`Pasillo_${aisle}_Inventario.xlsx`);
+  showToast(`Excel del Pasillo ${aisle} descargado`);
 }
 
 function updateSummaryAssigned(){
@@ -933,7 +953,11 @@ async function syncNow(){
 
   let timer=setInterval(poll,700);
   try{
-    const result=await api('/api/sync',{method:'POST',body:'{}'});
+    let result;
+    do{
+      result=await api('/api/sync',{method:'POST',body:'{}'});
+      await poll();
+    }while(result.complete===false);
     clearInterval(timer); timer=null;
     await poll();
     if(result.lastSyncAt) state.lastSyncAt=result.lastSyncAt;

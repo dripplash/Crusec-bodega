@@ -1,6 +1,9 @@
 node_modules/
 .env
 .env.*
+.dev.vars
+.wrangler/
+.wrangler-dry-run/
 npm-debug.log*
 
 # Credenciales y datos generados en ejecución local.
