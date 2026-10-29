@@ -17,7 +17,7 @@
     }
   ],
   "triggers": {
-    "crons": ["0 * * * *"]
+    "crons": ["*/15 * * * *"]
   },
   "vars": {
     "CATALOG_MODE": "relbase",
@@ -25,15 +25,14 @@
     "RELBASE_PRODUCTS_URL": "https://api.relbase.cl/api/v2/productos",
     "RELBASE_SCOPES": "products:read inventory:read warehouses:read",
     "RELBASE_MAIN_WAREHOUSE_ID": "2881",
-    "REQUIRE_APP_ACCESS": "true"
+    "REQUIRE_APP_ACCESS": "false",
+    "SYNC_INTERVAL_MINUTES": "15"
   },
   "secrets": {
     "required": [
       "RELBASE_CLIENT_ID",
       "RELBASE_CLIENT_SECRET",
       "RELBASE_REDIRECT_URI",
-      "APP_ACCESS_USER",
-      "APP_ACCESS_PASSWORD",
       "ADMIN_PIN",
       "DATA_ENCRYPTION_KEY"
     ]
